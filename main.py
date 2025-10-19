@@ -7,7 +7,8 @@ import sys
 import logging
 
 # Add the current directory to Python path so we can import from bot/
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
 
 # Configure logging
 logging.basicConfig(
@@ -18,6 +19,14 @@ logging.basicConfig(
 print("🚀 Railway: Starting Telegram Translator Bot...")
 print(f"📁 Working directory: {os.getcwd()}")
 print(f"🐍 Python path: {sys.path}")
+
+# Debug: Print environment info
+print("🔍 Environment Info:")
+print(f"   Python version: {sys.version}")
+print(f"   Current directory files: {[f for f in os.listdir('.') if not f.startswith('.')]}")
+
+if os.path.exists('bot'):
+    print(f"   Bot directory files: {os.listdir('bot')}")
 
 try:
     # Import your existing bot main function

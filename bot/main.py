@@ -3,21 +3,36 @@ import logging
 import sys
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables from .env file (for local development)
 load_dotenv()
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
+def get_bot_token():
+    """Get bot token from environment with better error handling"""
+    # Try multiple possible environment variable names
+    bot_token = os.getenv('BOT_TOKEN') or os.getenv('TELEGRAM_BOT_TOKEN') or os.getenv('BOT_TOKEN')
+    
+    if not bot_token:
+        # Print all available environment variables for debugging (without sensitive data)
+        print("🔍 Available environment variables:")
+        for key in sorted(os.environ.keys()):
+            if any(secret in key.lower() for secret in ['token', 'key', 'secret', 'password']):
+                print(f"   {key}: [REDACTED]")
+            else:
+                print(f"   {key}: {os.environ[key]}")
+        
+        raise ValueError("❌ BOT_TOKEN not found in environment variables. Please check your Railway environment variables.")
+    
+    return bot_token
+
 def setup_bot():
     """Setup and return the bot application"""
     print("🤖 Setting up Telegram Translator Bot...")
     
-    # Get bot token
-    bot_token = os.getenv('BOT_TOKEN')
-    if not bot_token:
-        raise ValueError("❌ BOT_TOKEN not found in environment variables")
-    
+    # Get bot token with better error handling
+    bot_token = get_bot_token()
     print("✅ Bot token found")
     
     from telegram.ext import Application
@@ -39,11 +54,11 @@ def setup_handlers(application):
     """Setup all bot handlers"""
     print("🔄 Setting up handlers...")
     
-    # Use relative imports with dot notation for package-relative imports
-    from .handlers.text_handler import setup_handlers as setup_text_handlers
-    from .handlers.voice_handler import setup_handlers as setup_voice_handlers
-    from .handlers.document_handler import setup_handlers as setup_document_handlers
-    from .handlers.inline_handler import setup_handlers as setup_inline_handlers
+    # Import handlers using absolute imports
+    from bot.handlers.text_handler import setup_handlers as setup_text_handlers
+    from bot.handlers.voice_handler import setup_handlers as setup_voice_handlers
+    from bot.handlers.document_handler import setup_handlers as setup_document_handlers
+    from bot.handlers.inline_handler import setup_handlers as setup_inline_handlers
     
     # Setup handlers
     setup_text_handlers(application)
@@ -56,6 +71,8 @@ def setup_handlers(application):
 def main():
     """Main function to start the bot"""
     print("🚀 Starting Telegram Translator Bot...")
+    print(f"📁 Current directory: {os.getcwd()}")
+    print(f"🐍 Python path: {sys.path}")
     
     try:
         # Setup bot application
@@ -76,6 +93,5 @@ def main():
         traceback.print_exc()
         raise
 
-# This allows the file to be imported without running the bot
 if __name__ == '__main__':
     main()
