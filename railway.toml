@@ -1,9 +1,5 @@
 [build]
-builder = "nixpacks"
+builder = "DOCKERFILE"
 
 [deploy]
-startCommand = "python setup.py"
-
-[[services]]
-name = "bot"
-run = "python setup.py"
+startCommand = "python main.py"

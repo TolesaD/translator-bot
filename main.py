@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-Start script for Railway deployment
+Railway entry point - This file should be in your project root
 """
 import os
 import sys
 import logging
+
+# Add the current directory to Python path so we can import from bot/
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Configure logging
 logging.basicConfig(
@@ -12,20 +15,23 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-# Add the current directory to Python path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+print("🚀 Railway: Starting Telegram Translator Bot...")
+print(f"📁 Working directory: {os.getcwd()}")
+print(f"🐍 Python path: {sys.path}")
 
 try:
-    from bot.main import main
-    print("✅ Bot module imported successfully")
+    # Import your existing bot main function
+    from bot.main import main as bot_main
+    print("✅ Successfully imported bot module")
     
-    if __name__ == "__main__":
-        print("🚀 Starting Telegram Translator Bot on Railway...")
-        main()
-        
+    # Run the bot
+    bot_main()
+    
 except ImportError as e:
     print(f"❌ Import error: {e}")
-    print("💡 Make sure all dependencies are installed and paths are correct")
+    print("📂 Files in current directory:", [f for f in os.listdir('.') if not f.startswith('.')])
+    if os.path.exists('bot'):
+        print("📂 Files in bot directory:", os.listdir('bot'))
     sys.exit(1)
 except Exception as e:
     print(f"❌ Fatal error: {e}")
