@@ -38,3 +38,16 @@ def format_translation_result(translation_data: dict, include_detection: bool = 
         result += f"\n\n**Pronunciation:**\n{translation_data['pronunciation']}"
     
     return result
+
+def sanitize_markdown_text(text: str) -> str:
+    """Sanitize text to prevent Markdown parsing errors"""
+    if not text:
+        return ""
+    
+    # Escape Markdown special characters
+    markdown_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    
+    for char in markdown_chars:
+        text = text.replace(char, f'\\{char}')
+    
+    return text

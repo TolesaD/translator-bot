@@ -7,12 +7,11 @@ from bot.services.document_parser import document_parser
 from bot.services.translation import translation_service
 from bot.services.database import db_manager
 from bot.utils.helpers import format_translation_result, truncate_text
-from bot.utils.constants import MAX_DOCUMENT_WORDS
 
 logger = logging.getLogger(__name__)
 
 async def handle_document(update: Update, context: CallbackContext):
-    """Handle document uploads for translation"""
+    """Handle document uploads for translation - NO LIMITS"""
     user_id = update.effective_user.id
     document = update.message.document
     filename = document.file_name
@@ -50,25 +49,19 @@ async def handle_document(update: Update, context: CallbackContext):
             await update.message.reply_text("❌ Could not extract text from the document.")
             return
         
-        # Check document size
-        if word_count > MAX_DOCUMENT_WORDS:
-            await update.message.reply_text(
-                f"❌ Document too large ({word_count} words). Maximum allowed: {MAX_DOCUMENT_WORDS} words."
-            )
-            return
-        
+        # NO WORD COUNT LIMIT - Process documents of any size
         # Send processing message
         processing_msg = await update.message.reply_text(
-            f"📄 Processing document ({word_count} words)..."
+            f"📄 Processing document ({word_count:,} words)..."
         )
         
         # Check text length for translation service limits
-        if len(extracted_text) > 4500:  # Leave some buffer
+        if len(extracted_text) > 4500:  # Leave some buffer for API limits
             # Split text into chunks for translation
             await context.bot.edit_message_text(
                 chat_id=processing_msg.chat_id,
                 message_id=processing_msg.message_id,
-                text="📄 Document is large, processing in chunks..."
+                text=f"📄 Large document detected ({word_count:,} words). Processing in chunks..."
             )
             
             # Split text into chunks of 4000 characters
@@ -88,13 +81,15 @@ async def handle_document(update: Update, context: CallbackContext):
             
             # Translate each chunk
             translated_chunks = []
+            total_chunks = len(chunks)
+            
             for i, chunk in enumerate(chunks):
                 if len(chunk) > 0:
                     try:
                         chunk_result = translation_service.translate_text(chunk, target_lang)
                         translated_chunks.append(chunk_result['translated_text'])
                         # Update progress
-                        progress = f"📄 Processing chunk {i+1}/{len(chunks)}..."
+                        progress = f"📄 Processing chunk {i+1}/{total_chunks}..."
                         await context.bot.edit_message_text(
                             chat_id=processing_msg.chat_id,
                             message_id=processing_msg.message_id,
@@ -120,12 +115,13 @@ async def handle_document(update: Update, context: CallbackContext):
         history_data = translation_result.copy()
         history_data['original_text'] = truncate_text(extracted_text, 200)
         history_data['translated_text'] = truncate_text(translation_result['translated_text'], 200)
+        history_data['translation_type'] = 'document'
         db_manager.add_translation_history(user_id, history_data)
         
         # Prepare response
         response = f"📄 **Document Translation**\n\n"
         response += f"**File:** {filename}\n"
-        response += f"**Words:** {word_count}\n\n"
+        response += f"**Words:** {word_count:,}\n\n"
         response += format_translation_result(translation_result)
         
         # Send as text if not too long, otherwise as file
@@ -138,7 +134,7 @@ async def handle_document(update: Update, context: CallbackContext):
             )
         else:
             # Send truncated message and full translation as file
-            truncated_response = f"📄 **Document Translation**\n\n**File:** {filename}\n**Words:** {word_count}\n\nTranslation completed! Sending as file..."
+            truncated_response = f"📄 **Document Translation**\n\n**File:** {filename}\n**Words:** {word_count:,}\n\nTranslation completed! Sending as file..."
             await context.bot.edit_message_text(
                 chat_id=processing_msg.chat_id,
                 message_id=processing_msg.message_id,
@@ -157,7 +153,7 @@ async def handle_document(update: Update, context: CallbackContext):
                     await update.message.reply_document(
                         document=doc_file,
                         filename=f"translated_{os.path.splitext(filename)[0]}.txt",
-                        caption=f"📄 Translated document ({word_count} words)"
+                        caption=f"📄 Translated document ({word_count:,} words)"
                     )
                 
             finally:

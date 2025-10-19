@@ -1,0 +1,8 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "python start.py"
+
+[build.environment]
+NIXPACKS_ENABLE_CACHE = "true"

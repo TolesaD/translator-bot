@@ -159,7 +159,7 @@ async def detect_language_command(update: Update, context: CallbackContext):
     message = f"🔍 **Language Detection**\n\n**Text:** {text}\n**Detected:** {lang_name} (`{source_lang}`)\n**Confidence:** {confidence_percent}%"
     await update.message.reply_text(message, parse_mode='Markdown')
 
-async def history_command(update: Update, context: CallbackContext):
+
     """Handle /history command"""
     user_id = update.effective_user.id
     
@@ -242,51 +242,60 @@ async def mydata_command(update: Update, context: CallbackContext):
     """Handle /mydata command - show user's stored data"""
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
+async def history_command(update: Update, context: CallbackContext):
+    """Handle /history command"""
+    user_id = update.effective_user.id
     
-    # Get user preferences
-    prefs = db_manager.get_user_preferences(user_id)
+    history = db_manager.get_translation_history(user_id)
     
-    message = f"🔍 **{user_name}'s Stored Data**\n\n"
+    if not history:
+        await update.message.reply_text("📝 No translation history found.\n\nStart translating text, voice messages, or documents to build your history!")
+        return
     
-    if prefs:
-        message += "**Preferences:**\n"
-        message += f"• Default Language: {get_language_name(prefs['default_language'])}\n"
-        if prefs.get('created_at'):
-            try:
-                created = datetime.fromisoformat(prefs['created_at'].replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M')
-                message += f"• Account Created: {created}\n"
-            except:
-                pass
-        if prefs.get('updated_at'):
-            try:
-                updated = datetime.fromisoformat(prefs['updated_at'].replace('Z', '+00:00')).strftime('%Y-%m-%d %H:%M')
-                message += f"• Last Updated: {updated}\n"
-            except:
-                pass
-    else:
-        message += "No preferences stored yet.\n"
+    message = "📝 **Recent Translations**\n\n"
     
-    # Get history info
-    history = db_manager.get_translation_history(user_id, limit=1)
-    full_history = db_manager.get_translation_history(user_id, limit=1000)  # Get count
-    message += f"• Translation History: {len(full_history)} entries\n"
+    for i, item in enumerate(history, 1):
+        # Truncate long texts for display and sanitize for Markdown
+        orig_truncated = item['original_text'][:80] + "..." if len(item['original_text']) > 80 else item['original_text']
+        trans_truncated = item['translated_text'][:80] + "..." if len(item['translated_text']) > 80 else item['translated_text']
+        
+        # Sanitize text to prevent Markdown parsing errors
+        orig_truncated = sanitize_markdown_text(orig_truncated)
+        trans_truncated = sanitize_markdown_text(trans_truncated)
+        
+        # Get language names
+        source_lang_name = get_language_name(item['source_language'])
+        target_lang_name = get_language_name(item['target_language'])
+        
+        # Sanitize language names too
+        source_lang_name = sanitize_markdown_text(source_lang_name)
+        target_lang_name = sanitize_markdown_text(target_lang_name)
+        
+        # Add type emoji
+        type_emoji = "📄" if item.get('translation_type') == 'document' else "🎤" if item.get('translation_type') == 'voice' else "🔊" if item.get('translation_type') == 'audio' else "📝"
+        
+        message += f"{i}. {type_emoji} From {source_lang_name} → To {target_lang_name}\n"
+        message += f"   📖 Original: {orig_truncated}\n"
+        message += f"   🌐 Translated: {trans_truncated}\n\n"
     
-    # Get statistics
-    stats = db_manager.get_user_stats(user_id)
-    if stats and stats.get('total_translations', 0) > 0:
-        message += f"• Total Translations: {stats['total_translations']}\n"
-        message += f"• Total Words Processed: {stats['total_words']:,}\n"
+    message += f"💾 Showing last {len(history)} translations"
     
-    message += "\n🔒 **Privacy & Data Security**\n"
-    message += "• Your data is stored securely in an encrypted database\n"
-    message += "• Only you can access your personal data\n"
-    message += "• Translation history is automatically cleaned after 90 days\n"
-    message += "• No data is shared with third parties\n"
-    message += "• You can request data deletion at any time\n"
+    # Send without Markdown to avoid parsing errors
+    await update.message.reply_text(message)
+
+# Add this helper function to sanitize Markdown text
+def sanitize_markdown_text(text: str) -> str:
+    """Sanitize text to prevent Markdown parsing errors"""
+    if not text:
+        return ""
     
-    message += "\n💾 *This data helps improve your translation experience and provide statistics.*"
+    # Escape Markdown special characters
+    markdown_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
     
-    await update.message.reply_text(message, parse_mode='Markdown')
+    for char in markdown_chars:
+        text = text.replace(char, f'\\{char}')
+    
+    return text
 
 async def audio_command(update: Update, context: CallbackContext):
     """Handle /audio command for text-to-speech"""

@@ -39,30 +39,31 @@ class TranslationService:
         }
     
     def get_supported_languages(self) -> Dict[str, str]:
-        """Return dictionary of supported languages"""
+        """Get all supported languages"""
         return self.supported_languages
     
     def detect_language(self, text: str) -> Tuple[str, float]:
-        """Detect language of text"""
+        """Detect the language of the given text"""
         try:
+            # For deep-translator, we'll use auto-detection during translation
             if not text or len(text.strip()) == 0:
-                return "unknown", 0.0
+                return "unknown", None
             
-            # Use deep-translator's auto-detection by attempting a translation
+            # Try to detect by attempting translation to English
             translator = GoogleTranslator(source='auto', target='en')
-            # The detection happens internally during translation
-            translated = translator.translate(text[:500])  # Use first 500 chars for efficiency
+            # The library handles detection internally
+            translated = translator.translate(text[:100])  # Use first 100 chars for detection
             
-            # Note: deep-translator doesn't provide confidence scores
-            # We return a fixed high confidence for compatibility
+            # Note: deep-translator doesn't provide confidence scores directly
+            # We return a fixed confidence for compatibility
             return 'auto', 0.95
             
         except Exception as e:
             logger.error(f"Language detection failed: {e}")
-            return "unknown", 0.0
+            return "unknown", None
     
     def translate_text(self, text: str, dest_lang: str, src_lang: Optional[str] = 'auto') -> Dict:
-        """Translate text to target language"""
+        """Translate text to target language - HANDLES LARGE TEXTS"""
         try:
             if not text or len(text.strip()) == 0:
                 raise ValueError("Text cannot be empty")
@@ -71,34 +72,13 @@ class TranslationService:
             if dest_lang not in self.supported_languages:
                 raise ValueError(f"Unsupported target language: {dest_lang}")
             
-            # Create translator instance
-            translator = GoogleTranslator(source=src_lang, target=dest_lang)
-            
-            # Perform translation
-            translated_text = translator.translate(text)
-            
-            # For source language detection, we'll use a separate call
-            detected_src_lang = src_lang
-            if src_lang == 'auto':
-                try:
-                    # Use a small sample for detection to avoid rate limits
-                    sample_text = text[:200]
-                    detect_translator = GoogleTranslator(source='auto', target='en')
-                    detect_translator.translate(sample_text)
-                    # Unfortunately deep-translator doesn't expose detected source language
-                    # We'll use 'auto' to indicate it was auto-detected
-                    detected_src_lang = 'auto'
-                except Exception as e:
-                    logger.warning(f"Could not detect source language: {e}")
-                    detected_src_lang = 'auto'
-            
-            return {
-                'original_text': text,
-                'translated_text': translated_text,
-                'source_language': detected_src_lang,
-                'target_language': dest_lang,
-                'pronunciation': None  # deep-translator doesn't provide pronunciation
-            }
+            # For very long texts, split into chunks
+            if len(text) > 4500:
+                logger.info(f"Large text detected ({len(text)} chars), splitting into chunks")
+                return self._translate_large_text(text, dest_lang, src_lang)
+            else:
+                # Normal translation for smaller texts
+                return self._translate_single(text, dest_lang, src_lang)
             
         except TranslationNotFound:
             logger.error("Translation not found")
@@ -113,8 +93,84 @@ class TranslationService:
             logger.error(f"Translation failed: {e}")
             raise Exception(f"Translation failed: {str(e)}")
     
-    def is_language_supported(self, lang_code: str) -> bool:
-        """Check if language code is supported"""
+    def _translate_large_text(self, text: str, dest_lang: str, src_lang: str) -> Dict:
+        """Translate large text by splitting into chunks"""
+        # Split text into chunks of 4000 characters
+        chunks = []
+        current_chunk = ""
+        
+        # Split by paragraphs first for better translation quality
+        paragraphs = text.split('\n\n')
+        
+        for paragraph in paragraphs:
+            # If adding this paragraph would exceed limit, save current chunk
+            if len(current_chunk) + len(paragraph) + 2 > 4000:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = paragraph
+            else:
+                if current_chunk:
+                    current_chunk += '\n\n' + paragraph
+                else:
+                    current_chunk = paragraph
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        logger.info(f"Split large text into {len(chunks)} chunks")
+        
+        # Translate each chunk
+        translated_chunks = []
+        for i, chunk in enumerate(chunks):
+            if len(chunk) > 0:
+                try:
+                    chunk_result = self._translate_single(chunk, dest_lang, src_lang)
+                    translated_chunks.append(chunk_result['translated_text'])
+                    logger.info(f"Translated chunk {i+1}/{len(chunks)}")
+                except Exception as e:
+                    logger.error(f"Chunk {i+1} translation failed: {e}")
+                    translated_chunks.append(f"[Translation failed for this section]")
+        
+        # Combine translated chunks
+        full_translated_text = '\n\n'.join(translated_chunks)
+        
+        return {
+            'original_text': text,
+            'translated_text': full_translated_text,
+            'source_language': src_lang,
+            'target_language': dest_lang
+        }
+    
+    def _translate_single(self, text: str, dest_lang: str, src_lang: str) -> Dict:
+        """Translate a single chunk of text"""
+        # Create translator instance
+        translator = GoogleTranslator(source=src_lang, target=dest_lang)
+        
+        # Perform translation
+        translated_text = translator.translate(text)
+        
+        # For source language detection
+        detected_src_lang = src_lang
+        if src_lang == 'auto':
+            try:
+                # Use a small sample for detection
+                sample_text = text[:200]
+                detector = GoogleTranslator(source='auto', target='en')
+                detector.translate(sample_text)
+                detected_src_lang = 'auto'
+            except:
+                detected_src_lang = 'auto'
+        
+        return {
+            'original_text': text,
+            'translated_text': translated_text,
+            'source_language': detected_src_lang,
+            'target_language': dest_lang,
+            'pronunciation': None
+        }
+    
+    def validate_language_code(self, lang_code: str) -> bool:
+        """Validate if a language code is supported"""
         return lang_code in self.supported_languages
 
 # Global translation service instance
