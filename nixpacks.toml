@@ -6,8 +6,8 @@ cmds = [
 
 [phases.install]
 cmds = [
-    "python3 -m ensurepip",
-    "python3 -m pip install --upgrade pip",
+    "curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py",
+    "python3 get-pip.py",
     "python3 -m pip install -r requirements.txt"
 ]
 
