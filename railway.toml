@@ -1,5 +1,12 @@
 [build]
-builder = "DOCKERFILE"
+builder = "nixpacks"
 
 [deploy]
 startCommand = "python main.py"
+
+[variables]
+BOT_TOKEN = "required"
+ANNOUNCEMENT_CHANNEL = ""
+
+[healthcheck]
+enabled = false
