@@ -2,11 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python main.py"
+startCommand = "chmod +x start.sh && ./start.sh"
 
 [variables]
-BOT_TOKEN = "required"
-ANNOUNCEMENT_CHANNEL = ""
-
-[healthcheck]
-enabled = false
+BOT_TOKEN = "7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs"
