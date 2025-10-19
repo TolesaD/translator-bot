@@ -1,42 +1,35 @@
 #!/usr/bin/env python3
+"""
+Main entry point for Railway deployment
+"""
 import os
 import sys
+import logging
 
-def setup_environment():
-    """Interactive setup script for environment variables"""
-    print("🤖 Telegram Translator Bot Setup")
-    print("=" * 40)
+# Add the bot directory to Python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+
+def main():
+    print("🚀 Starting Telegram Translator Bot on Railway...")
     
-    env_vars = {}
-    
-    # Get bot token
-    bot_token = input("Enter your Telegram Bot Token: ").strip()
-    if not bot_token:
-        print("❌ Bot token is required!")
-        sys.exit(1)
-    env_vars['BOT_TOKEN'] = bot_token
-    
-    # Get MongoDB URI
-    mongodb_uri = input("Enter your MongoDB Atlas connection URI: ").strip()
-    if not mongodb_uri:
-        print("❌ MongoDB URI is required!")
-        sys.exit(1)
-    env_vars['MONGODB_URI'] = mongodb_uri
-    
-    # Optional variables
-    default_lang = input("Enter default language code (en): ").strip() or "en"
-    env_vars['DEFAULT_LANGUAGE'] = default_lang
-    
-    max_history = input("Enter max history entries (10): ").strip() or "10"
-    env_vars['MAX_HISTORY'] = max_history
-    
-    # Write .env file
-    with open('.env', 'w') as f:
-        for key, value in env_vars.items():
-            f.write(f"{key}={value}\n")
-    
-    print("✅ Environment file created successfully!")
-    print("📁 You can now run: python -m bot.main")
+    try:
+        # Import and run the actual bot
+        from bot.main import main as bot_main
+        bot_main()
+    except ImportError as e:
+        print(f"❌ Import error: {e}")
+        print("Current Python path:", sys.path)
+        print("Current directory:", os.getcwd())
+        print("Files in current directory:", os.listdir('.'))
+        if os.path.exists('bot'):
+            print("Files in bot directory:", os.listdir('bot'))
+        raise
 
 if __name__ == '__main__':
-    setup_environment()
+    main()

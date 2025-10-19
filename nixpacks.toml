@@ -6,10 +6,8 @@ cmds = [
 
 [phases.install]
 cmds = [
-    "curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py",
-    "python3 get-pip.py",
-    "python3 -m pip install -r requirements.txt"
+    "pip install -r requirements.txt"
 ]
 
 [start]
-cmd = "python start.py"
+cmd = "python setup.py"

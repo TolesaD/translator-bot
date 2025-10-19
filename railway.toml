@@ -2,7 +2,8 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "python start.py"
+startCommand = "python setup.py"
 
-[build.environment]
-NIXPACKS_ENABLE_CACHE = "true"
+[[services]]
+name = "bot"
+run = "python setup.py"
