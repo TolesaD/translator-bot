@@ -1,13 +1,33 @@
+# Environment files
+.env
+*.env
+env/
+
+# Database files
+*.db
+*.sqlite
+data/
+backups/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-env/
-venv/
-.venv/
-.env
-*.sqlite3
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
 *.log
-telegram_bot_env/
+logs/
