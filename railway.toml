@@ -1,10 +1,10 @@
 [build]
 builder = "nixpacks"
+buildCommand = "mkdir -p /app/config && echo 'Creating config directory...'"
 
 [deploy]
 startCommand = "python main.py"
 
-# These are just documentation - they don't automatically set variables
 [variables]
-BOT_TOKEN = "required"
-ANNOUNCEMENT_CHANNEL = "optional"
+BOT_TOKEN = "7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs"
+ANNOUNCEMENT_CHANNEL = "@LanguagesTranslator"

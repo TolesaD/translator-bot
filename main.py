@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Railway entry point - Secure version
+Railway entry point - File-based configuration
 """
 import os
 import sys
@@ -16,11 +16,20 @@ print("🚀 Starting Telegram Bot on Railway...")
 print(f"📁 Working directory: {os.getcwd()}")
 
 try:
-    # Import configuration FIRST
-    from config import BOT_TOKEN, ANNOUNCEMENT_CHANNEL
+    # Try to create token file from environment variable (if it exists)
+    token_from_env = os.getenv('BOT_TOKEN')
+    if token_from_env:
+        print("🔧 Setting up token file from environment...")
+        os.makedirs('/app/config', exist_ok=True)
+        with open('/app/config/bot_token.txt', 'w') as f:
+            f.write(token_from_env.strip())
+        print("✅ Token file created from environment variable")
+    
+    # Import configuration
+    from config.loader import BOT_TOKEN, ANNOUNCEMENT_CHANNEL
     
     print(f"✅ Configuration loaded successfully")
-    print(f"   BOT_TOKEN length: {len(BOT_TOKEN)}")
+    print(f"   BOT_TOKEN: [HIDDEN - length: {len(BOT_TOKEN)}]")
     print(f"   ANNOUNCEMENT_CHANNEL: {ANNOUNCEMENT_CHANNEL}")
     
     # Add current directory to Python path
@@ -30,14 +39,25 @@ try:
     from bot.main import main as bot_main
     bot_main()
     
-except ImportError as e:
-    print(f"❌ Import error: {e}")
-    sys.exit(1)
-except ValueError as e:
-    print(f"❌ Configuration error: {e}")
-    sys.exit(1)
 except Exception as e:
     print(f"❌ Fatal error: {e}")
-    import traceback
-    traceback.print_exc()
+    
+    # Provide detailed help
+    print("\n🔧 SETUP INSTRUCTIONS:")
+    print("Since Railway environment variables aren't working, use file-based config:")
+    print("")
+    print("METHOD 1: Create config file manually")
+    print("   1. Create directory: /app/config")
+    print("   2. Create file: /app/config/bot_token.txt")
+    print("   3. Add your token: 7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs")
+    print("")
+    print("METHOD 2: Use build command in Railway")
+    print("   Add this build command in Railway:")
+    print('   echo "7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs" > /app/config/bot_token.txt')
+    print("")
+    print("METHOD 3: Use startup script")
+    print("   Create start.sh with:")
+    print('   echo "$BOT_TOKEN" > /app/config/bot_token.txt')
+    print('   python main.py')
+    
     sys.exit(1)
