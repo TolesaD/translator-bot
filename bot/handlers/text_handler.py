@@ -39,7 +39,7 @@ I can help you translate text between 100+ languages instantly!
 • *Voice Translation* - Send voice messages (transcribe & translate)
 • *Document Translation* - Upload PDF, DOCX, TXT files
 • *Text-to-Speech* - Use /audio command to get voice output
-• *Inline Mode* - Use @LanguagesTranlatorBot in any chat!
+• *Inline Mode* - Use @LanguagesTranslatorBot in any chat!
 
 *Examples:*
 • Send any text to translate automatically
