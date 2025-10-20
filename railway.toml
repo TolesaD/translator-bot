@@ -2,7 +2,9 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "chmod +x start.sh && ./start.sh"
+startCommand = "python main.py"
 
+# These are just documentation - they don't automatically set variables
 [variables]
-BOT_TOKEN = "7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs"
+BOT_TOKEN = "required"
+ANNOUNCEMENT_CHANNEL = "optional"
