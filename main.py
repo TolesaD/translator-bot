@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Railway entry point - File-based configuration
+Railway entry point - Simple and reliable
 """
 import os
 import sys
@@ -12,25 +12,56 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-print("🚀 Starting Telegram Bot on Railway...")
-print(f"📁 Working directory: {os.getcwd()}")
+print("=" * 50)
+print("🚀 Starting Telegram Bot on Railway")
+print("=" * 50)
+
+def get_bot_token():
+    """Get bot token from file with fallbacks"""
+    
+    # Check for token file first
+    token_paths = [
+        '/app/config/bot_token.txt',
+        './config/bot_token.txt', 
+        './bot_token.txt'
+    ]
+    
+    for path in token_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, 'r') as f:
+                    token = f.read().strip()
+                    if token and len(token) > 10:
+                        print(f"✅ Loaded token from: {path}")
+                        print(f"   Token length: {len(token)}")
+                        return token
+            except Exception as e:
+                print(f"⚠️  Failed to read {path}: {e}")
+    
+    # If no token file, try environment variable
+    token = os.getenv('BOT_TOKEN')
+    if token:
+        print("✅ Loaded token from environment variable")
+        return token
+    
+    # Last resort: Direct token (this will be replaced during build)
+    # This is TEMPORARY and will be removed once the build script works
+    emergency_token = "7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs"
+    print("🚨 USING EMERGENCY TOKEN - SETUP FILE-BASED CONFIG")
+    return emergency_token
 
 try:
-    # Try to create token file from environment variable (if it exists)
-    token_from_env = os.getenv('BOT_TOKEN')
-    if token_from_env:
-        print("🔧 Setting up token file from environment...")
-        os.makedirs('/app/config', exist_ok=True)
-        with open('/app/config/bot_token.txt', 'w') as f:
-            f.write(token_from_env.strip())
-        print("✅ Token file created from environment variable")
+    # Get the bot token
+    BOT_TOKEN = get_bot_token()
     
-    # Import configuration
-    from config.loader import BOT_TOKEN, ANNOUNCEMENT_CHANNEL
+    if not BOT_TOKEN or len(BOT_TOKEN) < 10:
+        raise ValueError("Invalid bot token")
     
-    print(f"✅ Configuration loaded successfully")
-    print(f"   BOT_TOKEN: [HIDDEN - length: {len(BOT_TOKEN)}]")
-    print(f"   ANNOUNCEMENT_CHANNEL: {ANNOUNCEMENT_CHANNEL}")
+    # Set as environment variable for the bot
+    os.environ['BOT_TOKEN'] = BOT_TOKEN
+    
+    print("✅ Token validation successful")
+    print("🤖 Starting bot...")
     
     # Add current directory to Python path
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -41,23 +72,6 @@ try:
     
 except Exception as e:
     print(f"❌ Fatal error: {e}")
-    
-    # Provide detailed help
-    print("\n🔧 SETUP INSTRUCTIONS:")
-    print("Since Railway environment variables aren't working, use file-based config:")
-    print("")
-    print("METHOD 1: Create config file manually")
-    print("   1. Create directory: /app/config")
-    print("   2. Create file: /app/config/bot_token.txt")
-    print("   3. Add your token: 7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs")
-    print("")
-    print("METHOD 2: Use build command in Railway")
-    print("   Add this build command in Railway:")
-    print('   echo "7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs" > /app/config/bot_token.txt')
-    print("")
-    print("METHOD 3: Use startup script")
-    print("   Create start.sh with:")
-    print('   echo "$BOT_TOKEN" > /app/config/bot_token.txt')
-    print('   python main.py')
-    
+    print("\n🔧 QUICK FIX: Add this build command in Railway:")
+    print('   mkdir -p /app/config && echo "7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs" > /app/config/bot_token.txt')
     sys.exit(1)

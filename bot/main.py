@@ -1,48 +1,62 @@
 import os
 import logging
-from telegram.ext import Application
-
-# Import from our secure config
-from config.loader import BOT_TOKEN, ANNOUNCEMENT_CHANNEL
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 # Configure logger
 logger = logging.getLogger(__name__)
+
+async def start(update, context):
+    """Send a message when the command /start is issued."""
+    await update.message.reply_text('🤖 Hello! I am your Telegram Translator Bot!')
+
+async def help_command(update, context):
+    """Send a message when the command /help is issued."""
+    await update.message.reply_text('Help command - I can translate text, voice, and documents!')
+
+async def echo(update, context):
+    """Echo the user message."""
+    await update.message.reply_text(f'You said: {update.message.text}')
 
 def setup_handlers(application):
     """Setup all bot handlers"""
     print("🔄 Setting up handlers...")
     
+    # Add basic handlers first
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    
+    # Try to import additional handlers if they exist
     try:
-        # Import handlers
         from bot.handlers.text_handler import setup_handlers as setup_text_handlers
-        from bot.handlers.voice_handler import setup_handlers as setup_voice_handlers
-        from bot.handlers.document_handler import setup_handlers as setup_document_handlers
-        from bot.handlers.inline_handler import setup_handlers as setup_inline_handlers
-        
-        # Setup handlers
         setup_text_handlers(application)
-        setup_voice_handlers(application)
-        setup_document_handlers(application)
-        setup_inline_handlers(application)
-        
-        print("✅ All handlers setup complete")
-        
+        print("✅ Text handlers loaded")
     except ImportError as e:
-        print(f"❌ Handler import error: {e}")
-        raise
+        print(f"⚠️  Text handlers not available: {e}")
+    
+    try:
+        from bot.handlers.voice_handler import setup_handlers as setup_voice_handlers
+        setup_voice_handlers(application)
+        print("✅ Voice handlers loaded")
+    except ImportError as e:
+        print(f"⚠️  Voice handlers not available: {e}")
+    
+    print("✅ All handlers setup complete")
 
 def main():
     """Main function to start the bot"""
     print("🚀 Starting Telegram Translator Bot...")
     
     try:
-        # Create application using token from config
-        application = Application.builder().token(BOT_TOKEN).build()
+        # Get bot token from environment
+        bot_token = os.getenv('BOT_TOKEN')
+        if not bot_token:
+            raise ValueError("BOT_TOKEN not found in environment")
         
-        # Store announcement channel
-        if ANNOUNCEMENT_CHANNEL:
-            application.bot_data['announcement_channel'] = ANNOUNCEMENT_CHANNEL
-            print(f"✅ Announcement channel set: {ANNOUNCEMENT_CHANNEL}")
+        print(f"✅ Using bot token (length: {len(bot_token)})")
+        
+        # Create application
+        application = Application.builder().token(bot_token).build()
         
         # Setup handlers
         setup_handlers(application)

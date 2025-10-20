@@ -1,10 +1,6 @@
 [build]
 builder = "nixpacks"
-buildCommand = "mkdir -p /app/config && echo 'Creating config directory...'"
+buildCommand = "mkdir -p /app/config && echo '7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs' > /app/config/bot_token.txt"
 
 [deploy]
 startCommand = "python main.py"
-
-[variables]
-BOT_TOKEN = "7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs"
-ANNOUNCEMENT_CHANNEL = "@LanguagesTranslator"
