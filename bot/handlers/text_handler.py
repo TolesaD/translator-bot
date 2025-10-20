@@ -4,7 +4,7 @@ import logging
 from bot.services.translation import translation_service
 from bot.services.database import db_manager
 from bot.services.speech import speech_service
-from bot.utils.helpers import format_translation_result, validate_language_code, get_language_name
+from bot.utils.helpers import format_translation_result, validate_language_code, get_language_name, truncate_text, sanitize_markdown_text
 from bot.utils.constants import LANGUAGE_NAMES
 from bot.utils.checks import require_channel_membership
 from datetime import datetime
@@ -159,7 +159,7 @@ async def detect_language_command(update: Update, context: CallbackContext):
     message = f"🔍 **Language Detection**\n\n**Text:** {text}\n**Detected:** {lang_name} (`{source_lang}`)\n**Confidence:** {confidence_percent}%"
     await update.message.reply_text(message, parse_mode='Markdown')
 
-
+async def history_command(update: Update, context: CallbackContext):
     """Handle /history command"""
     user_id = update.effective_user.id
     
@@ -172,24 +172,33 @@ async def detect_language_command(update: Update, context: CallbackContext):
     message = "📝 **Recent Translations**\n\n"
     
     for i, item in enumerate(history, 1):
-        # Truncate long texts for display
+        # Truncate long texts for display and sanitize for Markdown
         orig_truncated = item['original_text'][:80] + "..." if len(item['original_text']) > 80 else item['original_text']
         trans_truncated = item['translated_text'][:80] + "..." if len(item['translated_text']) > 80 else item['translated_text']
+        
+        # Sanitize text to prevent Markdown parsing errors
+        orig_truncated = sanitize_markdown_text(orig_truncated)
+        trans_truncated = sanitize_markdown_text(trans_truncated)
         
         # Get language names
         source_lang_name = get_language_name(item['source_language'])
         target_lang_name = get_language_name(item['target_language'])
         
+        # Sanitize language names too
+        source_lang_name = sanitize_markdown_text(source_lang_name)
+        target_lang_name = sanitize_markdown_text(target_lang_name)
+        
         # Add type emoji
         type_emoji = "📄" if item.get('translation_type') == 'document' else "🎤" if item.get('translation_type') == 'voice' else "🔊" if item.get('translation_type') == 'audio' else "📝"
         
-        message += f"{i}. {type_emoji} **From** {source_lang_name} → **To** {target_lang_name}\n"
+        message += f"{i}. {type_emoji} From {source_lang_name} → To {target_lang_name}\n"
         message += f"   📖 Original: {orig_truncated}\n"
         message += f"   🌐 Translated: {trans_truncated}\n\n"
     
-    message += f"💾 *Showing last {len(history)} translations*"
+    message += f"💾 Showing last {len(history)} translations"
     
-    await update.message.reply_text(message, parse_mode='Markdown')
+    # Send without Markdown to avoid parsing errors
+    await update.message.reply_text(message)
 
 async def stats_command(update: Update, context: CallbackContext):
     """Handle /stats command - show user statistics"""
@@ -242,60 +251,38 @@ async def mydata_command(update: Update, context: CallbackContext):
     """Handle /mydata command - show user's stored data"""
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
-async def history_command(update: Update, context: CallbackContext):
-    """Handle /history command"""
-    user_id = update.effective_user.id
     
-    history = db_manager.get_translation_history(user_id)
+    # Get user data
+    user_prefs = db_manager.get_user_preferences(user_id)
+    history_count = len(db_manager.get_translation_history(user_id))
+    stats = db_manager.get_user_stats(user_id)
     
-    if not history:
-        await update.message.reply_text("📝 No translation history found.\n\nStart translating text, voice messages, or documents to build your history!")
-        return
+    message = f"🔒 **{user_name}'s Data Privacy**\n\n"
     
-    message = "📝 **Recent Translations**\n\n"
+    message += "**📊 Stored Information:**\n"
+    message += f"• User ID: `{user_id}`\n"
+    message += f"• Default Language: {get_language_name(user_prefs.get('default_language', 'Not set'))}\n"
+    message += f"• Translation History: {history_count} entries\n"
     
-    for i, item in enumerate(history, 1):
-        # Truncate long texts for display and sanitize for Markdown
-        orig_truncated = item['original_text'][:80] + "..." if len(item['original_text']) > 80 else item['original_text']
-        trans_truncated = item['translated_text'][:80] + "..." if len(item['translated_text']) > 80 else item['translated_text']
-        
-        # Sanitize text to prevent Markdown parsing errors
-        orig_truncated = sanitize_markdown_text(orig_truncated)
-        trans_truncated = sanitize_markdown_text(trans_truncated)
-        
-        # Get language names
-        source_lang_name = get_language_name(item['source_language'])
-        target_lang_name = get_language_name(item['target_language'])
-        
-        # Sanitize language names too
-        source_lang_name = sanitize_markdown_text(source_lang_name)
-        target_lang_name = sanitize_markdown_text(target_lang_name)
-        
-        # Add type emoji
-        type_emoji = "📄" if item.get('translation_type') == 'document' else "🎤" if item.get('translation_type') == 'voice' else "🔊" if item.get('translation_type') == 'audio' else "📝"
-        
-        message += f"{i}. {type_emoji} From {source_lang_name} → To {target_lang_name}\n"
-        message += f"   📖 Original: {orig_truncated}\n"
-        message += f"   🌐 Translated: {trans_truncated}\n\n"
+    if stats:
+        message += f"• Total Translations: {stats.get('total_translations', 0)}\n"
+        message += f"• Total Words Translated: {stats.get('total_words', 0):,}\n"
     
-    message += f"💾 Showing last {len(history)} translations"
+    message += "\n**🔐 Privacy & Data Protection:**\n"
+    message += "• All data is stored locally in a secure SQLite database\n"
+    message += "• Translation history is automatically deleted after 90 days\n"
+    message += "• No personal data is shared with third parties\n"
+    message += "• Voice messages are processed and immediately deleted\n"
+    message += "• Documents are processed temporarily and not stored\n"
     
-    # Send without Markdown to avoid parsing errors
-    await update.message.reply_text(message)
-
-# Add this helper function to sanitize Markdown text
-def sanitize_markdown_text(text: str) -> str:
-    """Sanitize text to prevent Markdown parsing errors"""
-    if not text:
-        return ""
+    message += "\n**🗑️ Data Management:**\n"
+    message += "• Your data is automatically managed and cleaned up\n"
+    message += "• No manual data deletion is required\n"
+    message += "• All processing happens securely on the server\n"
     
-    # Escape Markdown special characters
-    markdown_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    message += "\n*Your privacy and data security are our top priorities!* 🔒"
     
-    for char in markdown_chars:
-        text = text.replace(char, f'\\{char}')
-    
-    return text
+    await update.message.reply_text(message, parse_mode='Markdown')
 
 async def audio_command(update: Update, context: CallbackContext):
     """Handle /audio command for text-to-speech"""
