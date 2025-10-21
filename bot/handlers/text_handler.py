@@ -19,6 +19,10 @@ async def start_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name
     
+    # Get bot info for inline instructions
+    bot = await context.bot.get_me()
+    bot_username = bot.username
+    
     welcome_text = f"""
 🤖 *Welcome to Universal Translator Bot, {user_name}!*
 
@@ -42,10 +46,10 @@ I can help you translate text between 100+ languages instantly!
 • *Inline Mode* - Use @LanguagesTranslatorBot in any chat!
 
 *Inline Mode Usage:*
-1. Go to *any chat* (not this one)
+1. Go to *any chat* (group, channel, or DM)
 2. Type `@LanguagesTranslatorBot` followed by your text
-3. Select from translation options
-4. Send instantly!
+3. Select from multiple translation options
+4. Send instantly to the chat!
 
 *Examples:*
 • Send any text to translate automatically
@@ -54,7 +58,7 @@ I can help you translate text between 100+ languages instantly!
 • /audio Hello world (get audio translation)
 • Send a voice message
 • Upload a document
-• *Inline:* Type `@LanguagesTranslatorBot Hello` in any chat
+• *Inline:* Type `@LanguagesTranslator Hello world` in any chat
 
 Start by sending me any text to translate! 🌍
 """

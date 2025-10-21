@@ -9,44 +9,43 @@ logger = logging.getLogger(__name__)
 
 async def handle_inline_query(update: Update, context: CallbackContext):
     """Handle inline queries for instant translation"""
-    query = update.inline_query.query.strip()
-    
-    # Show help when no query is provided
-    if not query:
-        help_result = InlineQueryResultArticle(
-            id='help',
-            title="Universal Translator - Type text to translate",
-            description="Example: Hello world → Hola mundo",
-            input_message_content=InputTextMessageContent(
-                message_text=(
-                    "🌐 **Universal Translator Bot**\n\n"
-                    "Use inline mode to translate instantly in any chat!\n\n"
-                    "Simply type: `@LanguagesTranslatorBot your text here`\n\n"
-                    "Supports 100+ languages automatically!"
-                ),
-                parse_mode='Markdown'
-            )
-        )
-        await update.inline_query.answer([help_result], cache_time=300, is_personal=True)
-        return
-    
-    user_id = update.inline_query.from_user.id
-    
-    # Get user's default language
-    default_lang = 'en'  # Default fallback
-    
-    if db_manager.is_connected:
-        user_prefs = db_manager.get_user_preferences(user_id)
-        default_lang = user_prefs.get('default_language', 'en')
-    
     try:
-        # Limit query length for inline mode (Telegram has limits)
-        if len(query) > 256:
-            query_display = query[:253] + "..."
+        query = update.inline_query.query.strip()
+        user_id = update.inline_query.from_user.id
+        
+        logger.info(f"🎯 INLINE: User {user_id} queried: '{query}'")
+        
+        # Show help when no query is provided
+        if not query:
+            help_result = InlineQueryResultArticle(
+                id='help',
+                title="Universal Translator - Type text to translate",
+                description="Example: Hello world → Hola mundo",
+                input_message_content=InputTextMessageContent(
+                    message_text=(
+                        "🌐 **Universal Translator Bot**\n\n"
+                        "Use inline mode to translate instantly in any chat!\n\n"
+                        "Simply type: `@LanguagesTranslatorBot your text here`\n\n"
+                        "Supports 100+ languages automatically!"
+                    ),
+                    parse_mode='Markdown'
+                )
+            )
+            await update.inline_query.answer([help_result], cache_time=300, is_personal=True)
+            return
+        
+        # Get user's default language
+        default_lang = 'en'  # Default fallback
+        
+        if db_manager.is_connected:
+            user_prefs = db_manager.get_user_preferences(user_id)
+            default_lang = user_prefs.get('default_language', 'en')
+        
+        # Limit query length for inline mode
+        if len(query) > 1000:
+            query_display = query[:997] + "..."
         else:
             query_display = query
-        
-        logger.info(f"🔍 Inline query from user {user_id}: '{query}' -> {default_lang}")
         
         # Perform translation
         translation_result = translation_service.translate_text(query, default_lang)
@@ -55,14 +54,14 @@ async def handle_inline_query(update: Update, context: CallbackContext):
         source_lang_name = get_language_name(translation_result['source_language'])
         target_lang_name = get_language_name(translation_result['target_language'])
         
-        # Sanitize text for Markdown to prevent parsing errors
+        # Sanitize text for Markdown
         original_safe = sanitize_markdown_text(query_display)
         translated_safe = sanitize_markdown_text(translation_result['translated_text'])
         
         # Create the main translation result
         main_result = InlineQueryResultArticle(
             id='translation',
-            title=f"→ {target_lang_name}: {translation_result['translated_text'][:50]}{'...' if len(translation_result['translated_text']) > 50 else ''}",
+            title=f"→ {target_lang_name}: {translation_result['translated_text'][:60]}{'...' if len(translation_result['translated_text']) > 60 else ''}",
             description=f"From {source_lang_name} to {target_lang_name}",
             input_message_content=InputTextMessageContent(
                 message_text=(
@@ -80,7 +79,7 @@ async def handle_inline_query(update: Update, context: CallbackContext):
         if db_manager.is_connected:
             try:
                 history_data = {
-                    'original_text': query[:100],  # Truncate for history
+                    'original_text': query[:100],
                     'translated_text': translation_result['translated_text'][:100],
                     'source_language': translation_result['source_language'],
                     'target_language': default_lang,
@@ -92,7 +91,7 @@ async def handle_inline_query(update: Update, context: CallbackContext):
         
         # Create additional results for popular languages
         additional_results = []
-        popular_languages = ['es', 'fr', 'de', 'it', 'pt']  # Spanish, French, German, Italian, Portuguese
+        popular_languages = ['es', 'fr', 'de', 'it', 'pt', 'ru', 'ar', 'zh-cn', 'ja', 'hi']  # Top 10 languages
         
         for lang_code in popular_languages:
             if lang_code != default_lang:  # Don't show the same language twice
@@ -103,7 +102,7 @@ async def handle_inline_query(update: Update, context: CallbackContext):
                     
                     alt_result = InlineQueryResultArticle(
                         id=f'translation_{lang_code}',
-                        title=f"→ {alt_lang_name}: {alt_translation['translated_text'][:50]}{'...' if len(alt_translation['translated_text']) > 50 else ''}",
+                        title=f"→ {alt_lang_name}: {alt_translation['translated_text'][:60]}{'...' if len(alt_translation['translated_text']) > 60 else ''}",
                         description=f"Translate to {alt_lang_name}",
                         input_message_content=InputTextMessageContent(
                             message_text=(
@@ -120,30 +119,22 @@ async def handle_inline_query(update: Update, context: CallbackContext):
                 except Exception as alt_error:
                     logger.warning(f"Failed to create alternative translation for {lang_code}: {alt_error}")
         
-        # Combine all results
-        all_results = [main_result] + additional_results[:4]  # Limit to 5 total results
+        # Combine all results (max 10 results total for inline mode)
+        all_results = [main_result] + additional_results[:9]
         
         await update.inline_query.answer(all_results, cache_time=1, is_personal=True)
+        logger.info(f"✅ INLINE: Sent {len(all_results)} translation options")
         
     except Exception as e:
-        logger.error(f"Inline translation failed: {e}")
+        logger.error(f"❌ Inline translation failed: {e}")
         
-        # Provide helpful error result
+        # Provide error result
         error_result = InlineQueryResultArticle(
             id='error',
             title="Translation Error",
-            description="Could not translate text - please try again",
+            description="Could not translate text",
             input_message_content=InputTextMessageContent(
-                message_text=(
-                    "❌ **Translation Failed**\n\n"
-                    "Sorry, I couldn't translate that text.\n\n"
-                    "This might be because:\n"
-                    "• The text is too long\n"
-                    "• Unsupported characters\n"
-                    "• Temporary service issue\n\n"
-                    "Please try again with different text."
-                ),
-                parse_mode='Markdown'
+                message_text="❌ Translation failed. Please try again with different text."
             )
         )
         await update.inline_query.answer([error_result], cache_time=1, is_personal=True)
