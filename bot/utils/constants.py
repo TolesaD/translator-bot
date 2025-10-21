@@ -37,6 +37,9 @@ LANGUAGE_NAMES = {
     'yi': 'Yiddish', 'yo': 'Yoruba', 'zu': 'Zulu'
 }
 
+# Add this line - SUPPORTED_LANGUAGES should be the same as LANGUAGE_NAMES
+SUPPORTED_LANGUAGES = LANGUAGE_NAMES
+
 # File processing - NO LIMITS
 SUPPORTED_DOCUMENT_TYPES = {'.pdf', '.docx', '.doc', '.txt'}
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB (increased from 50MB)

@@ -1,177 +1,230 @@
-from deep_translator import GoogleTranslator
-from deep_translator.exceptions import TranslationNotFound, RequestError, TooManyRequests
-from typing import Tuple, Dict, Optional
 import logging
+from deep_translator import GoogleTranslator
+from bot.utils.constants import SUPPORTED_LANGUAGES
 
 logger = logging.getLogger(__name__)
 
 class TranslationService:
     def __init__(self):
-        self.supported_languages = {
-            'af': 'Afrikaans', 'sq': 'Albanian', 'am': 'Amharic', 'ar': 'Arabic',
-            'hy': 'Armenian', 'az': 'Azerbaijani', 'eu': 'Basque', 'be': 'Belarusian',
-            'bn': 'Bengali', 'bs': 'Bosnian', 'bg': 'Bulgarian', 'ca': 'Catalan',
-            'ceb': 'Cebuano', 'zh-cn': 'Chinese (Simplified)', 'zh-tw': 'Chinese (Traditional)',
-            'co': 'Corsican', 'hr': 'Croatian', 'cs': 'Czech', 'da': 'Danish',
-            'nl': 'Dutch', 'en': 'English', 'eo': 'Esperanto', 'et': 'Estonian',
-            'fi': 'Finnish', 'fr': 'French', 'fy': 'Frisian', 'gl': 'Galician',
-            'ka': 'Georgian', 'de': 'German', 'el': 'Greek', 'gu': 'Gujarati',
-            'ht': 'Haitian Creole', 'ha': 'Hausa', 'haw': 'Hawaiian', 'he': 'Hebrew',
-            'hi': 'Hindi', 'hmn': 'Hmong', 'hu': 'Hungarian', 'is': 'Icelandic',
-            'ig': 'Igbo', 'id': 'Indonesian', 'ga': 'Irish', 'it': 'Italian',
-            'ja': 'Japanese', 'jv': 'Javanese', 'kn': 'Kannada', 'kk': 'Kazakh',
-            'km': 'Khmer', 'rw': 'Kinyarwanda', 'ko': 'Korean', 'ku': 'Kurdish',
-            'ky': 'Kyrgyz', 'lo': 'Lao', 'la': 'Latin', 'lv': 'Latvian',
-            'lt': 'Lithuanian', 'lb': 'Luxembourgish', 'mk': 'Macedonian', 'mg': 'Malagasy',
-            'ms': 'Malay', 'ml': 'Malayalam', 'mt': 'Maltese', 'mi': 'Maori',
-            'mr': 'Marathi', 'mn': 'Mongolian', 'my': 'Myanmar (Burmese)', 'ne': 'Nepali',
-            'no': 'Norwegian', 'ny': 'Nyanja (Chichewa)', 'or': 'Odia (Oriya)',
-            'ps': 'Pashto', 'fa': 'Persian', 'pl': 'Polish', 'pt': 'Portuguese',
-            'pa': 'Punjabi', 'ro': 'Romanian', 'ru': 'Russian', 'sm': 'Samoan',
-            'gd': 'Scots Gaelic', 'sr': 'Serbian', 'st': 'Sesotho', 'sn': 'Shona',
-            'sd': 'Sindhi', 'si': 'Sinhala (Sinhalese)', 'sk': 'Slovak', 'sl': 'Slovenian',
-            'so': 'Somali', 'es': 'Spanish', 'su': 'Sundanese', 'sw': 'Swahili',
-            'sv': 'Swedish', 'tl': 'Tagalog (Filipino)', 'tg': 'Tajik', 'ta': 'Tamil',
-            'tt': 'Tatar', 'te': 'Telugu', 'th': 'Thai', 'tr': 'Turkish',
-            'tk': 'Turkmen', 'uk': 'Ukrainian', 'ur': 'Urdu', 'ug': 'Uyghur',
-            'uz': 'Uzbek', 'vi': 'Vietnamese', 'cy': 'Welsh', 'xh': 'Xhosa',
-            'yi': 'Yiddish', 'yo': 'Yoruba', 'zu': 'Zulu'
-        }
-    
-    def get_supported_languages(self) -> Dict[str, str]:
-        """Get all supported languages"""
-        return self.supported_languages
-    
-    def detect_language(self, text: str) -> Tuple[str, float]:
-        """Detect the language of the given text"""
-        try:
-            # For deep-translator, we'll use auto-detection during translation
-            if not text or len(text.strip()) == 0:
-                return "unknown", None
-            
-            # Try to detect by attempting translation to English
-            translator = GoogleTranslator(source='auto', target='en')
-            # The library handles detection internally
-            translated = translator.translate(text[:100])  # Use first 100 chars for detection
-            
-            # Note: deep-translator doesn't provide confidence scores directly
-            # We return a fixed confidence for compatibility
-            return 'auto', 0.95
-            
-        except Exception as e:
-            logger.error(f"Language detection failed: {e}")
-            return "unknown", None
-    
-    def translate_text(self, text: str, dest_lang: str, src_lang: Optional[str] = 'auto') -> Dict:
-        """Translate text to target language - HANDLES LARGE TEXTS"""
-        try:
-            if not text or len(text.strip()) == 0:
-                raise ValueError("Text cannot be empty")
-            
-            # Validate target language
-            if dest_lang not in self.supported_languages:
-                raise ValueError(f"Unsupported target language: {dest_lang}")
-            
-            # For very long texts, split into chunks
-            if len(text) > 4500:
-                logger.info(f"Large text detected ({len(text)} chars), splitting into chunks")
-                return self._translate_large_text(text, dest_lang, src_lang)
-            else:
-                # Normal translation for smaller texts
-                return self._translate_single(text, dest_lang, src_lang)
-            
-        except TranslationNotFound:
-            logger.error("Translation not found")
-            raise Exception("Translation not found for the given text")
-        except TooManyRequests:
-            logger.error("Too many translation requests")
-            raise Exception("Translation service quota exceeded. Please try again later.")
-        except RequestError as e:
-            logger.error(f"Translation request failed: {e}")
-            raise Exception("Translation service unavailable. Please try again later.")
-        except Exception as e:
-            logger.error(f"Translation failed: {e}")
-            raise Exception(f"Translation failed: {str(e)}")
-    
-    def _translate_large_text(self, text: str, dest_lang: str, src_lang: str) -> Dict:
-        """Translate large text by splitting into chunks"""
-        # Split text into chunks of 4000 characters
-        chunks = []
-        current_chunk = ""
-        
-        # Split by paragraphs first for better translation quality
-        paragraphs = text.split('\n\n')
-        
-        for paragraph in paragraphs:
-            # If adding this paragraph would exceed limit, save current chunk
-            if len(current_chunk) + len(paragraph) + 2 > 4000:
-                if current_chunk:
-                    chunks.append(current_chunk.strip())
-                current_chunk = paragraph
-            else:
-                if current_chunk:
-                    current_chunk += '\n\n' + paragraph
-                else:
-                    current_chunk = paragraph
-        
-        if current_chunk:
-            chunks.append(current_chunk.strip())
-        
-        logger.info(f"Split large text into {len(chunks)} chunks")
-        
-        # Translate each chunk
-        translated_chunks = []
-        for i, chunk in enumerate(chunks):
-            if len(chunk) > 0:
-                try:
-                    chunk_result = self._translate_single(chunk, dest_lang, src_lang)
-                    translated_chunks.append(chunk_result['translated_text'])
-                    logger.info(f"Translated chunk {i+1}/{len(chunks)}")
-                except Exception as e:
-                    logger.error(f"Chunk {i+1} translation failed: {e}")
-                    translated_chunks.append(f"[Translation failed for this section]")
-        
-        # Combine translated chunks
-        full_translated_text = '\n\n'.join(translated_chunks)
-        
-        return {
-            'original_text': text,
-            'translated_text': full_translated_text,
-            'source_language': src_lang,
-            'target_language': dest_lang
-        }
-    
-    def _translate_single(self, text: str, dest_lang: str, src_lang: str) -> Dict:
-        """Translate a single chunk of text"""
-        # Create translator instance
-        translator = GoogleTranslator(source=src_lang, target=dest_lang)
-        
-        # Perform translation
-        translated_text = translator.translate(text)
-        
-        # For source language detection
-        detected_src_lang = src_lang
-        if src_lang == 'auto':
-            try:
-                # Use a small sample for detection
-                sample_text = text[:200]
-                detector = GoogleTranslator(source='auto', target='en')
-                detector.translate(sample_text)
-                detected_src_lang = 'auto'
-            except:
-                detected_src_lang = 'auto'
-        
-        return {
-            'original_text': text,
-            'translated_text': translated_text,
-            'source_language': detected_src_lang,
-            'target_language': dest_lang,
-            'pronunciation': None
-        }
-    
-    def validate_language_code(self, lang_code: str) -> bool:
-        """Validate if a language code is supported"""
-        return lang_code in self.supported_languages
+        self.supported_languages = SUPPORTED_LANGUAGES
+        logger.info("✅ Translation service initialized")
 
-# Global translation service instance
+    def get_supported_languages(self):
+        """Return supported languages"""
+        return self.supported_languages
+
+    def detect_language(self, text: str):
+        """Detect language using GoogleTranslator"""
+        try:
+            if len(text.strip()) < 2:
+                return "unknown", 0.0
+                
+            detector = GoogleTranslator()
+            detection = detector.detect(text)
+            
+            logger.info(f"🔍 Raw detection result: {detection}")
+            
+            if detection and isinstance(detection, str):
+                # If it returns a string like 'en'
+                return detection, 0.95
+            elif detection and isinstance(detection, list) and len(detection) > 0:
+                # If it returns a list like ['en', 0.95]
+                lang_code = detection[0]
+                confidence = detection[1] if len(detection) > 1 else 0.95
+                return lang_code, confidence
+            else:
+                return "unknown", 0.0
+                
+        except Exception as e:
+            logger.error(f"Language detection error: {e}")
+            return "unknown", 0.0
+
+    def detect_amharic_specific(self, text: str) -> dict:
+        """Specific detection for Amharic language"""
+        # Ethiopic Unicode range: U+1200 to U+137F
+        ethiopic_chars = 0
+        total_chars = 0
+        
+        for char in text:
+            if '\u1200' <= char <= '\u137F':  # Ethiopic script range
+                ethiopic_chars += 1
+            if char.isalpha():
+                total_chars += 1
+        
+        if total_chars > 0:
+            ethiopic_ratio = ethiopic_chars / total_chars
+            if ethiopic_ratio > 0.3:  # If 30%+ of alphabetic characters are Ethiopic
+                return {
+                    'language': 'am',
+                    'confidence': min(ethiopic_ratio, 0.95),
+                    'method': 'ethiopic_script'
+                }
+        
+        return None
+
+    def _simple_language_detection(self, text: str) -> dict:
+        """Simple keyword-based language detection for common languages"""
+        text_lower = text.lower()
+        
+        # Common words for major languages - IMPROVED FOR AMHARIC
+        language_keywords = {
+            'en': ['the', 'and', 'is', 'are', 'was', 'were', 'this', 'that', 'with', 'for'],
+            'es': ['el', 'la', 'los', 'las', 'de', 'que', 'y', 'en', 'un', 'una'],
+            'fr': ['le', 'la', 'les', 'de', 'et', 'en', 'un', 'une', 'des', 'que'],
+            'de': ['der', 'die', 'das', 'und', 'in', 'den', 'von', 'zu', 'mit', 'sich'],
+            'it': ['il', 'la', 'le', 'di', 'e', 'che', 'in', 'un', 'una', 'per'],
+            'pt': ['o', 'a', 'os', 'as', 'de', 'e', 'em', 'um', 'uma', 'para'],
+            'ru': ['и', 'в', 'не', 'на', 'я', 'быть', 'с', 'что', 'а', 'по'],
+            'zh': ['的', '是', '在', '和', '了', '有', '我', '他', '这', '不'],
+            'ja': ['の', 'に', 'は', 'を', 'た', 'が', 'で', 'て', 'と', 'し'],
+            'ar': ['في', 'من', 'على', 'أن', 'ما', 'هو', 'هي', 'إلى', 'كان', 'لا'],
+            'am': ['እና', 'ውስጥ', 'ነው', 'አይደለም', 'ይህ', 'ያ', 'ከ', 'ለ', 'በ', 'እኔ']  # Amharic common words
+        }
+        
+        # Character-based detection for Amharic (Ethiopic script)
+        ethiopic_chars = set('ሀሁሂሃሄህሆለሉሊላሌልሎሏሐሑሒሓሔሕሖሗመሙሚማሜምሞሟሠሡሢሣሤሥሦሧረሩሪራሬርሮሯሰሱሲሳሴስሶሷሸሹሺሻሼሽሾሿቀቁቂቃቄቅቆቋበቡቢባቤብቦቧቨቩቪቫቬቭቮቯተቱቲታቴትቶቷቸቹቺቻቼችቾቿኀኁኂኃኄኅኆኇኈ኉ኊኋኌኍ኎ነኑኒናኔንኖኗኘኙኚኛኜኝኞኟአኡኢኣኤእኦኧከኩኪካኬክኮኳኸኹኺኻኼኽኾወዉዊዋዌውዎዐዑዒዓዔዕዖዘዙዚዛዜዝዞዟዠዡዢዣዤዥዦዧየዩዪያዬይዮደዱዲዳዴድዶዷዸዹዺዻዼዽዾዿጀጁጂጃጄጅጆጇገጉጊጋጌግጎጏጠጡጢጣጤጥጦጧጨጩጪጫጬጭጮጯጰጱጲጳጴጵጶጷጸጹጺጻጼጽጾጿፀፁፂፃፄፅፆፇፈፉፊፋፌፍፎፏፐፑፒፓፔፕፖፗ')
+        
+        # Check for Ethiopic script (Amharic, Tigrinya, etc.)
+        ethiopic_count = sum(1 for char in text if char in ethiopic_chars)
+        if ethiopic_count > 0:
+            amharic_ratio = ethiopic_count / len(text)
+            if amharic_ratio > 0.3:  # If 30%+ characters are Ethiopic
+                return {
+                    'language': 'am',
+                    'confidence': min(amharic_ratio, 0.9)
+                }
+        
+        scores = {}
+        for lang_code, keywords in language_keywords.items():
+            score = sum(1 for keyword in keywords if keyword in text_lower)
+            if score > 0:
+                scores[lang_code] = score
+        
+        if scores:
+            best_lang = max(scores.items(), key=lambda x: x[1])
+            confidence = min(best_lang[1] / 10.0, 0.8)  # Normalize to 0-0.8 confidence
+            return {
+                'language': best_lang[0],
+                'confidence': confidence
+            }
+        
+        return None
+
+    def detect_language_with_fallback(self, text: str) -> dict:
+        """
+        Detect language with multiple fallback methods
+        Returns: {'language': 'en', 'confidence': 0.95, 'method': 'primary'}
+        """
+        try:
+            # Method 0: Specific script detection for Amharic
+            amharic_detection = self.detect_amharic_specific(text)
+            if amharic_detection:
+                logger.info(f"🔍 Amharic script detection: {amharic_detection}")
+                return amharic_detection
+
+            # Method 1: Primary detection (GoogleTranslator)
+            try:
+                source_lang, confidence = self.detect_language(text)
+                logger.info(f"🔍 Primary detection: {source_lang}, {confidence}")
+                
+                if source_lang and source_lang not in ['unknown', 'auto'] and confidence > 0.1:
+                    return {
+                        'language': source_lang,
+                        'confidence': confidence,
+                        'method': 'google_translator'
+                    }
+            except Exception as e:
+                logger.warning(f"Primary detection failed: {e}")
+
+            # Method 2: Try langdetect library
+            try:
+                from langdetect import detect, detect_langs, LangDetectException
+                detected_langs = detect_langs(text)
+                logger.info(f"🔍 Langdetect result: {detected_langs}")
+                
+                if detected_langs:
+                    best_lang = detected_langs[0]
+                    if best_lang.prob > 0.1:  # Minimum confidence
+                        return {
+                            'language': best_lang.lang,
+                            'confidence': best_lang.prob,
+                            'method': 'langdetect'
+                        }
+            except ImportError:
+                logger.warning("langdetect not available")
+            except LangDetectException as e:
+                logger.warning(f"langdetect failed: {e}")
+            except Exception as e:
+                logger.warning(f"langdetect error: {e}")
+
+            # Method 3: Simple keyword-based detection for common languages
+            simple_detection = self._simple_language_detection(text)
+            if simple_detection:
+                logger.info(f"🔍 Keyword detection: {simple_detection}")
+                return {
+                    'language': simple_detection['language'],
+                    'confidence': simple_detection['confidence'],
+                    'method': 'keyword'
+                }
+
+            # Method 4: Try translation with 'auto' detection
+            try:
+                # Translate to English and see what source language was detected
+                translation_result = self.translate_text(text, 'en')
+                detected_lang = translation_result.get('source_language', 'unknown')
+                logger.info(f"🔍 Translation fallback detection: {detected_lang}")
+                
+                if detected_lang and detected_lang != 'auto':
+                    return {
+                        'language': detected_lang,
+                        'confidence': 0.5,  # Medium confidence
+                        'method': 'translation_fallback'
+                    }
+            except Exception as e:
+                logger.warning(f"Translation fallback detection failed: {e}")
+
+            return {
+                'language': 'unknown',
+                'confidence': 0,
+                'method': 'all_methods_failed'
+            }
+            
+        except Exception as e:
+            logger.error(f"All language detection methods failed: {e}")
+            return {
+                'language': 'unknown',
+                'confidence': 0,
+                'method': 'error'
+            }
+
+    def translate_text(self, text: str, target_lang: str, source_lang: str = 'auto'):
+        """Translate text to target language"""
+        try:
+            if source_lang == 'auto':
+                # Auto-detect source language
+                detected_lang, confidence = self.detect_language(text)
+                source_lang = detected_lang if detected_lang != 'unknown' else 'auto'
+            
+            logger.info(f"🌐 Translating from {source_lang} to {target_lang}")
+            
+            # Validate languages
+            if target_lang not in self.supported_languages:
+                raise ValueError(f"Unsupported target language: {target_lang}")
+            
+            # Perform translation
+            translator = GoogleTranslator(source=source_lang, target=target_lang)
+            translated_text = translator.translate(text)
+            
+            return {
+                'original_text': text,
+                'translated_text': translated_text,
+                'source_language': source_lang,
+                'target_language': target_lang
+            }
+            
+        except Exception as e:
+            logger.error(f"Translation error: {e}")
+            raise Exception(f"Translation failed: {str(e)}")
+
+# Global instance
 translation_service = TranslationService()

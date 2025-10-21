@@ -1,15 +1,31 @@
 import re
+import logging
 from typing import Optional
 from bot.services.translation import translation_service
+from bot.utils.constants import LANGUAGE_NAMES
+
+logger = logging.getLogger(__name__)
 
 def validate_language_code(lang_code: str) -> bool:
     """Validate if language code is supported"""
-    return translation_service.is_language_supported(lang_code)
+    try:
+        # Get supported languages from translation service
+        supported_languages = translation_service.get_supported_languages()
+        return lang_code.lower() in supported_languages
+    except Exception as e:
+        # Fallback: check against LANGUAGE_NAMES
+        logger.warning(f"Translation service validation failed, using fallback: {e}")
+        return lang_code.lower() in LANGUAGE_NAMES
 
 def get_language_name(lang_code: str) -> str:
     """Get full language name from code"""
-    languages = translation_service.get_supported_languages()
-    return languages.get(lang_code.lower(), f"Unknown ({lang_code})")
+    try:
+        languages = translation_service.get_supported_languages()
+        return languages.get(lang_code.lower(), f"Unknown ({lang_code})")
+    except Exception as e:
+        # Fallback to constants
+        logger.warning(f"Translation service failed, using constants fallback: {e}")
+        return LANGUAGE_NAMES.get(lang_code.lower(), f"Unknown ({lang_code})")
 
 def sanitize_text(text: str) -> str:
     """Sanitize and clean text"""

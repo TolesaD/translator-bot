@@ -104,7 +104,7 @@ Use `/setlang` without arguments to see all supported languages.
 """
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
-@require_channel_membership  
+#@require_channel_membership  
 async def set_language_command(update: Update, context: CallbackContext):
     """Handle /setlang command"""
     if not context.args:
@@ -136,28 +136,134 @@ async def set_language_command(update: Update, context: CallbackContext):
     await update.message.reply_text(f"✅ Default language set to **{lang_name}** (`{lang_code}`)", parse_mode='Markdown')
 
 async def detect_language_command(update: Update, context: CallbackContext):
-    """Handle /detect command"""
+    """Handle /detect command with improved detection and Markdown safety"""
     if not context.args:
         await update.message.reply_text("Please provide text to detect. Usage: `/detect Hello world`", parse_mode='Markdown')
         return
     
     text = " ".join(context.args)
     
-    if len(text) > 1000:
-        await update.message.reply_text("❌ Text too long for detection. Please use text shorter than 1000 characters.")
+    if len(text) < 3:
+        await update.message.reply_text("❌ Text too short for detection. Please provide at least 3 characters.")
         return
     
-    source_lang, confidence = translation_service.detect_language(text)
-    
-    if source_lang == "unknown":
-        await update.message.reply_text("❌ Could not detect language")
+    if len(text) > 5000:
+        await update.message.reply_text("❌ Text too long for detection. Please use text shorter than 5000 characters.")
         return
     
-    lang_name = get_language_name(source_lang)
-    confidence_percent = confidence * 100 if confidence else "Unknown"
-    
-    message = f"🔍 **Language Detection**\n\n**Text:** {text}\n**Detected:** {lang_name} (`{source_lang}`)\n**Confidence:** {confidence_percent}%"
-    await update.message.reply_text(message, parse_mode='Markdown')
+    try:
+        # Send processing message for longer texts
+        if len(text) > 100:
+            processing_msg = await update.message.reply_text("🔍 Detecting language...")
+        else:
+            processing_msg = None
+        
+        # Perform language detection with multiple fallbacks
+        detection_result = translation_service.detect_language_with_fallback(text)
+        
+        # Log for debugging
+        logger.info(f"🔍 Language detection - Text length: {len(text)}, Result: {detection_result}")
+        
+        source_lang = detection_result.get('language', 'unknown')
+        confidence = detection_result.get('confidence', 0)
+        method = detection_result.get('method', 'unknown')
+        
+        # Handle detection results
+        if source_lang in ["unknown", "auto", None]:
+            # Use plain text for unknown detection to avoid Markdown issues
+            response_text = (
+                f"🔍 Language Detection\n\n"
+                f"Text: {text[:200]}{'...' if len(text) > 200 else ''}\n"
+                f"Detected: Could not determine language\n"
+                f"Method: {method}\n\n"
+                f"This could be because:\n"
+                f"• The text is too ambiguous\n"
+                f"• Mixed languages in the text\n"
+                f"• Technical issue with detection service\n\n"
+                f"Try using clearer text in one language."
+            )
+            
+            if processing_msg:
+                await context.bot.edit_message_text(
+                    chat_id=processing_msg.chat_id,
+                    message_id=processing_msg.message_id,
+                    text=response_text
+                )
+            else:
+                await update.message.reply_text(response_text)
+            return
+        
+        lang_name = get_language_name(source_lang)
+        confidence_percent = f"{confidence * 100:.1f}%" if confidence else "Unknown"
+        
+        # For Amharic and other complex scripts, use plain text to avoid Markdown issues
+        # Check if text contains characters that might break Markdown
+        has_complex_script = any(char in text for char in ['ሀ', 'ሁ', 'ሂ', 'ሃ', 'ሄ']) or len(text) > 500
+        
+        if has_complex_script:
+            # Use plain text for complex scripts or long texts
+            message = (
+                f"🔍 Language Detection\n\n"
+                f"Text: {text[:200]}{'...' if len(text) > 200 else ''}\n"
+                f"Detected: {lang_name} ({source_lang})\n"
+                f"Confidence: {confidence_percent}\n"
+                f"Method: {method}"
+            )
+            parse_mode = None
+        else:
+            # Use Markdown for simple texts
+            message = (
+                f"🔍 **Language Detection**\n\n"
+                f"**Text:** {text[:200]}{'...' if len(text) > 200 else ''}\n"
+                f"**Detected:** {lang_name} (`{source_lang}`)\n"
+                f"**Confidence:** {confidence_percent}\n"
+                f"**Method:** {method}"
+            )
+            parse_mode = 'Markdown'
+        
+        if processing_msg:
+            await context.bot.edit_message_text(
+                chat_id=processing_msg.chat_id,
+                message_id=processing_msg.message_id,
+                text=message,
+                parse_mode=parse_mode
+            )
+        else:
+            await update.message.reply_text(message, parse_mode=parse_mode)
+        
+    except Exception as e:
+        logger.error(f"Language detection failed: {e}")
+        
+        # Try again with plain text as fallback
+        try:
+            error_msg = (
+                f"❌ Language detection failed.\n\n"
+                f"Error: {str(e)}\n\n"
+                f"Please try again with different text."
+            )
+            
+            if processing_msg:
+                await context.bot.edit_message_text(
+                    chat_id=processing_msg.chat_id,
+                    message_id=processing_msg.message_id,
+                    text=error_msg
+                )
+            else:
+                await update.message.reply_text(error_msg)
+        except Exception as fallback_error:
+            # Final fallback - very simple message
+            logger.error(f"Even fallback failed: {fallback_error}")
+            try:
+                if processing_msg:
+                    await context.bot.edit_message_text(
+                        chat_id=processing_msg.chat_id,
+                        message_id=processing_msg.message_id,
+                        text="❌ Detection failed. Please try again."
+                    )
+                else:
+                    await update.message.reply_text("❌ Detection failed. Please try again.")
+            except:
+                pass  # Give up if even this fails
 
 async def history_command(update: Update, context: CallbackContext):
     """Handle /history command"""
