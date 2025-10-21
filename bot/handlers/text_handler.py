@@ -41,6 +41,12 @@ I can help you translate text between 100+ languages instantly!
 • *Text-to-Speech* - Use /audio command to get voice output
 • *Inline Mode* - Use @LanguagesTranslatorBot in any chat!
 
+*Inline Mode Usage:*
+1. Go to *any chat* (not this one)
+2. Type `@LanguagesTranslatorBot` followed by your text
+3. Select from translation options
+4. Send instantly!
+
 *Examples:*
 • Send any text to translate automatically
 • /setlang fr (set French as default)
@@ -48,6 +54,7 @@ I can help you translate text between 100+ languages instantly!
 • /audio Hello world (get audio translation)
 • Send a voice message
 • Upload a document
+• *Inline:* Type `@LanguagesTranslatorBot Hello` in any chat
 
 Start by sending me any text to translate! 🌍
 """
@@ -58,9 +65,6 @@ async def help_command(update: Update, context: CallbackContext):
     """Handle /help command"""
     # Check if voice features are available
     voice_status = "✅ Available" if speech_service.is_speech_available() else "❌ Temporarily unavailable"
-    
-    # Check database status
-    db_status = "✅ Connected" if db_manager.is_connected else "❌ Disabled (running in memory)"
     
     help_text = f"""
 📖 **How to Use the Translator Bot**
@@ -90,8 +94,6 @@ In any chat, type `@LanguagesTranslator [text]` to translate instantly.
 **8. Statistics & Data**
 Use `/stats` to see your translation statistics
 Use `/mydata` to see what data we store about you
-
-**Database Status:** {db_status}
 
 **Supported Languages:**
 I support 100+ languages including:
@@ -375,7 +377,6 @@ async def mydata_command(update: Update, context: CallbackContext):
         message += f"• Total Words Translated: {stats.get('total_words', 0):,}\n"
     
     message += "\n**🔐 Privacy & Data Protection:**\n"
-    message += "• All data is stored locally in a secure SQLite database\n"
     message += "• Translation history is automatically deleted after 90 days\n"
     message += "• No personal data is shared with third parties\n"
     message += "• Voice messages are processed and immediately deleted\n"
