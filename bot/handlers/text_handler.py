@@ -60,7 +60,7 @@ I can help you translate text between 100+ languages instantly!
 • /audio Hello world (get audio translation)
 • Send a voice message
 • Upload a document
-• *Inline:* Type `@LanguagesTranslator Hello world` in any chat
+• *Inline:* Type `@LanguagesTranslatorBot Hello world` in any chat
 
 Start by sending me any text to translate! 🌍
 """
@@ -95,7 +95,7 @@ Use `/detect [text]` to detect the language of any text.
 Use `/audio [text]` to get voice output of the translation.
 
 **7. Inline Mode**
-In any chat, type `@LanguagesTranslator [text]` to translate instantly.
+In any chat, type `@LanguagesTranslatorBot [text]` to translate instantly.
 
 **8. Statistics & Data**
 Use `/stats` to see your translation statistics
