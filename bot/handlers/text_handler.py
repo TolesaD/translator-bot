@@ -2,18 +2,20 @@ from telegram import Update
 from telegram.ext import CommandHandler, MessageHandler, CallbackContext, filters
 import logging
 from bot.services.translation import translation_service
-from bot.services.database import db_manager
+from database import db_manager
 from bot.services.speech import speech_service
 from bot.utils.helpers import format_translation_result, validate_language_code, get_language_name, truncate_text, sanitize_markdown_text
 from bot.utils.constants import LANGUAGE_NAMES
 from bot.utils.checks import require_channel_membership
 from datetime import datetime
+from telegram.ext import CallbackQueryHandler
 
 logger = logging.getLogger(__name__)
 
 # In-memory storage for user preferences (fallback when database is unavailable)
 user_preferences_cache = {}
 
+@require_channel_membership
 async def start_command(update: Update, context: CallbackContext):
     """Handle /start command"""
     user_id = update.effective_user.id
@@ -110,7 +112,7 @@ Use `/setlang` without arguments to see all supported languages.
 """
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
-#@require_channel_membership  
+@require_channel_membership  
 async def set_language_command(update: Update, context: CallbackContext):
     """Handle /setlang command"""
     if not context.args:
@@ -141,6 +143,7 @@ async def set_language_command(update: Update, context: CallbackContext):
     lang_name = get_language_name(lang_code)
     await update.message.reply_text(f"✅ Default language set to **{lang_name}** (`{lang_code}`)", parse_mode='Markdown')
 
+@require_channel_membership
 async def detect_language_command(update: Update, context: CallbackContext):
     """Handle /detect command with improved detection and Markdown safety"""
     if not context.args:
@@ -271,6 +274,7 @@ async def detect_language_command(update: Update, context: CallbackContext):
             except:
                 pass  # Give up if even this fails
 
+@require_channel_membership
 async def history_command(update: Update, context: CallbackContext):
     """Handle /history command"""
     user_id = update.effective_user.id
@@ -312,6 +316,7 @@ async def history_command(update: Update, context: CallbackContext):
     # Send without Markdown to avoid parsing errors
     await update.message.reply_text(message)
 
+@require_channel_membership
 async def stats_command(update: Update, context: CallbackContext):
     """Handle /stats command - show user statistics"""
     user_id = update.effective_user.id
@@ -359,6 +364,7 @@ async def stats_command(update: Update, context: CallbackContext):
     
     await update.message.reply_text(message, parse_mode='Markdown')
 
+@require_channel_membership
 async def mydata_command(update: Update, context: CallbackContext):
     """Handle /mydata command - show user's stored data"""
     user_id = update.effective_user.id
@@ -395,6 +401,7 @@ async def mydata_command(update: Update, context: CallbackContext):
     
     await update.message.reply_text(message, parse_mode='Markdown')
 
+@require_channel_membership
 async def audio_command(update: Update, context: CallbackContext):
     """Handle /audio command for text-to-speech"""
     if not context.args:
@@ -496,6 +503,7 @@ async def audio_command(update: Update, context: CallbackContext):
         except:
             await update.message.reply_text(error_msg)
 
+@require_channel_membership
 async def handle_text_message(update: Update, context: CallbackContext):
     """Handle regular text messages for translation"""
     user_id = update.effective_user.id
@@ -585,3 +593,10 @@ def setup_handlers(application):
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("mydata", mydata_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
+    
+    # Add channel verification callback handler
+    from bot.utils.checks import handle_channel_verification
+    application.add_handler(CallbackQueryHandler(
+        handle_channel_verification, 
+        pattern="^verify_channels$"
+    ))

@@ -7,9 +7,11 @@ from bot.services.document_parser import document_parser
 from bot.services.translation import translation_service
 from bot.services.database import db_manager
 from bot.utils.helpers import format_translation_result, truncate_text
+from bot.utils.checks import require_channel_membership
 
 logger = logging.getLogger(__name__)
 
+@require_channel_membership
 async def handle_document(update: Update, context: CallbackContext):
     """Handle document uploads for translation - NO LIMITS"""
     user_id = update.effective_user.id

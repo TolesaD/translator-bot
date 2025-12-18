@@ -43,3 +43,12 @@ SUPPORTED_LANGUAGES = LANGUAGE_NAMES
 # File processing - NO LIMITS
 SUPPORTED_DOCUMENT_TYPES = {'.pdf', '.docx', '.doc', '.txt'}
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB (increased from 50MB)
+
+# Admin settings
+MAX_BROADCAST_USERS = 10000  # Maximum users to broadcast to at once
+ADMIN_PANEL_REFRESH = 300  # Seconds to refresh admin panel data
+USER_PAGE_SIZE = 10  # Users per page in admin panel
+
+# Channel verification
+CHANNEL_VERIFICATION_TIMEOUT = 5  # Seconds to wait for channel verification
+MAX_CHANNEL_RETRIES = 3  # Maximum retries for channel verification

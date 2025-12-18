@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import json
-import time
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import logging
@@ -56,7 +55,7 @@ class DatabaseManager:
         """Initialize database tables with proper constraints - idempotent"""
         cursor = self.conn.cursor()
         
-        # User preferences table - UPDATED with channels_verified_at
+        # User preferences table - UPDATED to add new fields
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS user_preferences (
                 user_id INTEGER PRIMARY KEY,
@@ -64,7 +63,6 @@ class DatabaseManager:
                 is_admin BOOLEAN DEFAULT 0,
                 is_banned BOOLEAN DEFAULT 0,
                 channels_joined TEXT DEFAULT '[]',  -- JSON array of channel IDs user has joined
-                channels_verified_at TEXT DEFAULT '{}',  -- JSON: {"@channel1": timestamp, "@channel2": timestamp}
                 ban_reason TEXT,
                 ban_date TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -73,7 +71,7 @@ class DatabaseManager:
             )
         ''')
         
-        # Translation history table
+        # Translation history table - NO FOREIGN KEY constraint
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS translation_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,7 +159,7 @@ class DatabaseManager:
             try:
                 cursor = self.conn.cursor()
                 cursor.execute(
-                    'SELECT default_language, is_admin, is_banned, channels_joined, channels_verified_at, created_at, updated_at, last_activity FROM user_preferences WHERE user_id = ?', 
+                    'SELECT default_language, is_admin, is_banned, channels_joined, created_at, updated_at, last_activity FROM user_preferences WHERE user_id = ?', 
                     (user_id,)
                 )
                 row = cursor.fetchone()
@@ -174,19 +172,11 @@ class DatabaseManager:
                         except:
                             channels = []
                     
-                    timestamps = {}
-                    if row['channels_verified_at']:
-                        try:
-                            timestamps = json.loads(row['channels_verified_at'])
-                        except:
-                            timestamps = {}
-                    
                     return {
                         'default_language': row['default_language'],
                         'is_admin': bool(row['is_admin']),
                         'is_banned': bool(row['is_banned']),
                         'channels_joined': channels,
-                        'channels_verified_at': timestamps,
                         'user_id': user_id,
                         'created_at': row['created_at'],
                         'updated_at': row['updated_at'],
@@ -515,18 +505,6 @@ class DatabaseManager:
         
         with self._lock:
             try:
-                # Special case: clear all channels
-                if channel_id == "clear_all":
-                    cursor = self.conn.cursor()
-                    cursor.execute('''
-                        UPDATE user_preferences 
-                        SET channels_joined = '[]', channels_verified_at = '{}', updated_at = ?
-                        WHERE user_id = ?
-                    ''', (datetime.utcnow(), user_id))
-                    self.conn.commit()
-                    logger.info(f"Cleared all channels for user {user_id}")
-                    return True
-                
                 # Get current channels
                 cursor = self.conn.cursor()
                 cursor.execute(
@@ -564,75 +542,8 @@ class DatabaseManager:
                 self.conn.rollback()
                 return False
     
-    def update_channel_verification_timestamp(self, user_id: int, channel_id: str):
-        """Update the timestamp when a channel was last verified"""
-        if not self.is_connected:
-            return False
-        
-        with self._lock:
-            try:
-                # Get current timestamps
-                cursor = self.conn.cursor()
-                cursor.execute(
-                    'SELECT channels_verified_at FROM user_preferences WHERE user_id = ?', 
-                    (user_id,)
-                )
-                row = cursor.fetchone()
-                
-                timestamps = {}
-                if row and row['channels_verified_at']:
-                    try:
-                        timestamps = json.loads(row['channels_verified_at'])
-                    except:
-                        timestamps = {}
-                
-                # Update timestamp for this channel
-                timestamps[channel_id] = time.time()
-                
-                # Update database
-                cursor.execute('''
-                    UPDATE user_preferences 
-                    SET channels_verified_at = ?, updated_at = ?
-                    WHERE user_id = ?
-                ''', (json.dumps(timestamps), datetime.utcnow(), user_id))
-                
-                self.conn.commit()
-                logger.debug(f"Updated verification timestamp for user {user_id}, channel {channel_id}")
-                return True
-                
-            except Exception as e:
-                logger.error(f"Error updating verification timestamp: {e}")
-                self.conn.rollback()
-                return False
-    
-    def get_channel_verification_timestamp(self, user_id: int, channel_id: str):
-        """Get when a channel was last verified for a user"""
-        if not self.is_connected:
-            return 0
-        
-        with self._lock:
-            try:
-                cursor = self.conn.cursor()
-                cursor.execute(
-                    'SELECT channels_verified_at FROM user_preferences WHERE user_id = ?', 
-                    (user_id,)
-                )
-                row = cursor.fetchone()
-                
-                if row and row['channels_verified_at']:
-                    try:
-                        timestamps = json.loads(row['channels_verified_at'])
-                        return timestamps.get(channel_id, 0)
-                    except:
-                        return 0
-                return 0
-                
-            except Exception as e:
-                logger.error(f"Error getting verification timestamp: {e}")
-                return 0
-    
-    def has_joined_required_channels(self, user_id: int, required_channels: list, max_cache_age: int = 3600) -> bool:
-        """Check if user has joined all required channels, with cache expiry"""
+    def has_joined_required_channels(self, user_id: int, required_channels: list) -> bool:
+        """Check if user has joined all required channels"""
         if not self.is_connected or not required_channels:
             return True  # No channels required or DB not connected
         
@@ -640,7 +551,7 @@ class DatabaseManager:
             try:
                 cursor = self.conn.cursor()
                 cursor.execute(
-                    'SELECT channels_joined, channels_verified_at FROM user_preferences WHERE user_id = ?', 
+                    'SELECT channels_joined FROM user_preferences WHERE user_id = ?', 
                     (user_id,)
                 )
                 row = cursor.fetchone()
@@ -648,42 +559,19 @@ class DatabaseManager:
                 if not row or not row['channels_joined']:
                     return False
                 
-                # Parse user's channels
                 try:
                     user_channels = json.loads(row['channels_joined'])
                 except:
                     user_channels = []
                 
-                # Parse timestamps
-                timestamps = {}
-                if row['channels_verified_at']:
-                    try:
-                        timestamps = json.loads(row['channels_verified_at'])
-                    except:
-                        timestamps = {}
-                
                 # Check if user has joined all required channels
                 required_set = set(required_channels)
                 user_set = set(user_channels)
                 
-                if not required_set.issubset(user_set):
-                    return False
-                
-                # Check cache expiry for each channel
-                current_time = time.time()
-                for channel in required_channels:
-                    last_verified = timestamps.get(channel, 0)
-                    cache_age = current_time - last_verified
-                    
-                    if cache_age > max_cache_age:
-                        # Cache expired for this channel
-                        logger.info(f"Cache expired for user {user_id}, channel {channel}. Age: {cache_age:.0f}s")
-                        return False
-                
-                return True
+                return required_set.issubset(user_set)
                 
             except Exception as e:
-                logger.error(f"Error checking channel membership with cache: {e}")
+                logger.error(f"Error checking channel membership: {e}")
                 return False
     
     def set_admin_status(self, user_id: int, is_admin: bool = True):

@@ -11,7 +11,6 @@ def setup_bot():
     print("🤖 Setting up Telegram Translator Bot...")
     
     # Load environment variables from .env file (for local development)
-    # This will be ignored on Railway where vars are set directly in environment
     load_dotenv()
     
     # Get bot token
@@ -29,6 +28,8 @@ def setup_bot():
     # DEBUG: Check all environment variables
     print("🔍 Environment Variables Check:")
     print(f"   ANNOUNCEMENT_CHANNEL: {os.getenv('ANNOUNCEMENT_CHANNEL')}")
+    print(f"   REQUIRED_CHANNELS: {os.getenv('REQUIRED_CHANNELS')}")
+    print(f"   ADMIN_IDS: {os.getenv('ADMIN_IDS')}")
     print(f"   BOT_TOKEN length: {len(bot_token) if bot_token else 'NOT FOUND'}")
     
     # Store announcement channel in bot_data for access in handlers
@@ -47,6 +48,19 @@ def setup_bot():
     else:
         print("⚠️  No announcement channel set - membership checks will be skipped")
     
+    # Schedule periodic channel check job (runs every 6 hours)
+    from telegram.ext import CallbackContext
+    from bot.utils.checks import periodic_channel_check
+    
+    async def callback_periodic_check(context: CallbackContext):
+        await periodic_channel_check(context)
+    
+    # Run every 6 hours (21600 seconds)
+    job_queue = application.job_queue
+    if job_queue:
+        job_queue.run_repeating(callback_periodic_check, interval=21600, first=10)
+        print("✅ Scheduled periodic channel checks (every 6 hours)")
+    
     return application
 
 def setup_handlers(application):
@@ -59,12 +73,24 @@ def setup_handlers(application):
         from bot.handlers.voice_handler import setup_handlers as setup_voice_handlers
         from bot.handlers.document_handler import setup_handlers as setup_document_handlers
         from bot.handlers.inline_handler import setup_handlers as setup_inline_handlers
+        from bot.handlers.admin_handler import setup_handlers as setup_admin_handlers
+        
+        # Import checks for verification handler
+        from bot.utils.checks import handle_channel_verification
         
         # Setup handlers
         setup_text_handlers(application)
         setup_voice_handlers(application)
         setup_document_handlers(application)
         setup_inline_handlers(application)
+        setup_admin_handlers(application)
+        
+        # Add channel verification callback handler
+        from telegram.ext import CallbackQueryHandler
+        application.add_handler(CallbackQueryHandler(
+            handle_channel_verification, 
+            pattern="^verify_channels$"
+        ))
         
         print("✅ All handlers setup complete")
         

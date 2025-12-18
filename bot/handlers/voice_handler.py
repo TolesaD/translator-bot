@@ -7,9 +7,11 @@ from bot.services.speech import speech_service
 from bot.services.translation import translation_service
 from bot.services.database import db_manager
 from bot.utils.helpers import format_translation_result, get_language_name
+from bot.utils.checks import require_channel_membership
 
 logger = logging.getLogger(__name__)
 
+@require_channel_membership
 async def handle_voice_message(update: Update, context: CallbackContext):
     """Handle voice messages for transcription and translation"""
     user_id = update.effective_user.id
