@@ -15,7 +15,7 @@ FORCE_RECHECK_INTERVAL = 86400  # 24 hours in seconds
 
 def get_required_channels():
     """Get required channels directly from environment"""
-    channels_str = os.getenv('REQUIRED_CHANNELS', '@LanguagesTranslator,@Bimis')
+    channels_str = os.getenv('REQUIRED_CHANNELS', '@LanguagesTranslator,@Botomics')
     logger.info(f"🔍 Raw REQUIRED_CHANNELS from env: '{channels_str}'")
     
     if channels_str:
