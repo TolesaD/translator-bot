@@ -2,7 +2,7 @@ from telegram import Update, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import InlineQueryHandler, CallbackContext
 import logging
 from bot.services.translation import translation_service
-from bot.services.database import db_manager
+from database import db_manager
 from bot.utils.helpers import get_language_name, sanitize_markdown_text
 
 logger = logging.getLogger(__name__)
@@ -10,8 +10,23 @@ logger = logging.getLogger(__name__)
 async def handle_inline_query(update: Update, context: CallbackContext):
     """Handle inline queries for instant translation"""
     try:
-        query = update.inline_query.query.strip()
         user_id = update.inline_query.from_user.id
+        
+        # Check if user is banned
+        if db_manager.is_user_banned(user_id):
+            # Create error result for banned user
+            error_result = InlineQueryResultArticle(
+                id='banned',
+                title="You are banned",
+                description="You cannot use this bot",
+                input_message_content=InputTextMessageContent(
+                    message_text="⛔️ You are banned from using this bot."
+                )
+            )
+            await update.inline_query.answer([error_result], cache_time=300, is_personal=True)
+            return
+        
+        query = update.inline_query.query.strip()
         
         logger.info(f"🎯 INLINE: User {user_id} queried: '{query}'")
         

@@ -39,15 +39,20 @@ async def admin_callback_handler(update: Update, context: CallbackContext):
     query = update.callback_query
     user_id = query.from_user.id
     
+    logger.info(f"🔍 CALLBACK: Received callback data: {query.data} from user {user_id}")
+    
     # Check if user is admin
     if not _is_admin(user_id):
+        logger.warning(f"❌ User {user_id} tried to access admin callback but is not admin")
         await query.answer("⛔️ You are not authorized.", show_alert=True)
         return
     
     await query.answer()
     
     data = query.data
+    logger.info(f"🔍 CALLBACK: Processing data: {data}")
     
+    # Route to appropriate handler
     if data == 'admin_stats':
         await _show_statistics(query, context)
     elif data == 'admin_users':
@@ -69,6 +74,7 @@ async def admin_callback_handler(update: Update, context: CallbackContext):
         await _show_ban_user(query, context, user_id_target)
     elif data.startswith('unban_user_'):
         user_id_target = int(data.split('_')[2])
+        logger.info(f"🔧 UNBAN: Attempting to unban user {user_id_target}")
         await _unban_user(query, context, user_id_target)
     elif data.startswith('ban_confirm_'):
         user_id_target = int(data.split('_')[2])
@@ -79,6 +85,9 @@ async def admin_callback_handler(update: Update, context: CallbackContext):
         await query.edit_message_text("📢 Broadcast cancelled.")
     elif data == 'back_to_admin':
         await _back_to_admin_panel(query, context)
+    else:
+        logger.warning(f"⚠️ Unknown callback data: {data}")
+        await query.edit_message_text(f"Unknown action: {data}")
 
 async def _show_statistics(query, context):
     """Show bot statistics"""
@@ -311,10 +320,55 @@ async def _ban_user_confirm(query, context, user_id_target: int):
     context.user_data.pop('awaiting_ban_reason', None)
 
 async def _unban_user(query, context, user_id_target: int):
-    """Unban a user"""
+    """Unban a user with detailed debugging and immediate feedback"""
     admin_id = query.from_user.id
     
+    logger.info(f"🔧 UNBAN: Starting unban process from admin panel")
+    logger.info(f"🔧 UNBAN: Target user: {user_id_target}")
+    logger.info(f"🔧 UNBAN: Admin ID: {admin_id}")
+    
+    # Show "processing" message immediately
+    await query.edit_message_text(
+        f"🔄 Unbanning user `{user_id_target}`...",
+        parse_mode='Markdown'
+    )
+    
+    # First, check current status BEFORE unban
+    try:
+        cursor = db_manager.conn.cursor()
+        cursor.execute(
+            'SELECT is_banned, ban_reason FROM user_preferences WHERE user_id = ?',
+            (user_id_target,)
+        )
+        row_before = cursor.fetchone()
+        
+        if row_before:
+            logger.info(f"🔧 UNBAN: Before unban - is_banned: {row_before['is_banned']}, ban_reason: {row_before['ban_reason']}")
+            is_banned_before = bool(row_before['is_banned'])
+        else:
+            logger.info(f"🔧 UNBAN: User {user_id_target} not found before unban attempt")
+            is_banned_before = False
+    except Exception as e:
+        logger.error(f"❌ UNBAN: Error checking before status: {e}")
+        is_banned_before = False
+    
+    # Perform the unban
     success = db_manager.unban_user(user_id_target, admin_id)
+    
+    # Check status AFTER unban
+    try:
+        cursor.execute(
+            'SELECT is_banned, ban_reason FROM user_preferences WHERE user_id = ?',
+            (user_id_target,)
+        )
+        row_after = cursor.fetchone()
+        
+        if row_after:
+            logger.info(f"🔧 UNBAN: After unban - is_banned: {row_after['is_banned']}, ban_reason: {row_after['ban_reason']}")
+    except Exception as e:
+        logger.error(f"❌ UNBAN: Error checking after status: {e}")
+    
+    logger.info(f"🔧 UNBAN: db_manager.unban_user returned: {success}")
     
     if success:
         # Try to notify the user
@@ -324,16 +378,44 @@ async def _unban_user(query, context, user_id_target: int):
                 text="✅ **Your ban has been lifted.**\n\n"
                      "You can now use the bot again."
             )
-        except:
-            pass  # User might have blocked the bot
+            logger.info(f"🔧 UNBAN: Notification sent to user {user_id_target}")
+        except Exception as e:
+            logger.warning(f"⚠️ UNBAN: Could not notify user {user_id_target}: {e}")
+        
+        # Show success message
+        success_message = f"✅ User `{user_id_target}` has been unbanned successfully!"
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("👁️ View User", callback_data=f'user_detail_{user_id_target}'),
+                InlineKeyboardButton("🔙 Back to Users", callback_data='user_page_1')
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
-            f"✅ User `{user_id_target}` has been unbanned.",
+            success_message,
+            reply_markup=reply_markup,
             parse_mode='Markdown'
         )
     else:
+        # Show error message with debug info
+        error_message = f"❌ Failed to unban user `{user_id_target}`.\n\n"
+        error_message += f"**Debug Information:**\n"
+        error_message += f"• Before unban: is_banned={is_banned_before}\n"
+        error_message += f"• After unban: Unknown (database error)\n"
+        error_message += f"• Database method returned: {success}\n\n"
+        error_message += "Please try again or check the logs."
+        
+        keyboard = [
+            [InlineKeyboardButton("🔄 Try Again", callback_data=f'unban_user_{user_id_target}')],
+            [InlineKeyboardButton("🔙 Back", callback_data=f'user_detail_{user_id_target}')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await query.edit_message_text(
-            f"❌ Failed to unban user `{user_id_target}`.",
+            error_message,
+            reply_markup=reply_markup,
             parse_mode='Markdown'
         )
 
@@ -439,6 +521,85 @@ async def _show_channel_settings(query, context):
     
     await query.edit_message_text(message, reply_markup=reply_markup, parse_mode='Markdown')
 
+    # Add to admin_handler.py
+async def db_diagnostic(update: Update, context: CallbackContext):
+    """Database diagnostic command"""
+    user_id = update.effective_user.id
+    
+    if not _is_admin(user_id):
+        await update.message.reply_text("❌ Admin only")
+        return
+    
+    # Get target user from command args
+    if not context.args:
+        await update.message.reply_text("Usage: /dbdiagnostic <user_id>")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("Invalid user ID")
+        return
+    
+    # Direct database query
+    cursor = db_manager.conn.cursor()
+    
+    message = f"🔍 **Database Diagnostic for User {target_user_id}**\n\n"
+    
+    # Check user_preferences table
+    cursor.execute('''
+        SELECT user_id, is_banned, ban_reason, ban_date, 
+               created_at, updated_at, last_activity
+        FROM user_preferences 
+        WHERE user_id = ?
+    ''', (target_user_id,))
+    
+    row = cursor.fetchone()
+    
+    if not row:
+        message += "❌ User not found in user_preferences table\n"
+    else:
+        message += "📋 **user_preferences table:**\n"
+        for key in row.keys():
+            value = row[key]
+            if value is None:
+                value_str = "NULL"
+            else:
+                value_str = str(value)
+            message += f"• `{key}`: `{value_str}`\n"
+            if key == 'is_banned':
+                message += f"  → bool(is_banned): {bool(value)}\n"
+    
+    # Check admin_actions for ban/unban history
+    cursor.execute('''
+        SELECT action_type, details, timestamp
+        FROM admin_actions 
+        WHERE target_user_id = ?
+        ORDER BY timestamp DESC
+        LIMIT 5
+    ''', (target_user_id,))
+    
+    actions = cursor.fetchall()
+    if actions:
+        message += "\n📜 **Recent Admin Actions:**\n"
+        for action in actions:
+            message += f"• {action['action_type']}: {action['details']} ({action['timestamp']})\n"
+    
+    # Check if user exists in translation_history
+    cursor.execute(
+        'SELECT COUNT(*) as count FROM translation_history WHERE user_id = ?',
+        (target_user_id,)
+    )
+    count_row = cursor.fetchone()
+    message += f"\n📝 **Translation History:** {count_row['count']} records\n"
+    
+    # Database info
+    message += f"\n💾 **Database Info:**\n"
+    message += f"• Path: `{db_manager.db_path}`\n"
+    message += f"• Connected: {db_manager.is_connected}\n"
+    
+    await update.message.reply_text(message, parse_mode='Markdown')
+
 async def _back_to_admin_panel(query, context):
     """Return to admin panel"""
     # Clean up any pending actions
@@ -466,12 +627,17 @@ async def handle_admin_text_input(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     
     if not _is_admin(user_id):
+        # If not admin, let other handlers process it
         return
     
     text = update.message.text
     
+    logger.info(f"🔍 Admin text input from user {user_id}: '{text}'")
+    logger.info(f"📊 User data state: {context.user_data}")
+    
     # Check if we're waiting for broadcast message
     if context.user_data.get('awaiting_broadcast'):
+        logger.info(f"📢 Processing broadcast message from admin {user_id}")
         context.user_data['broadcast_message'] = text
         
         # Confirm broadcast
@@ -492,10 +658,12 @@ async def handle_admin_text_input(update: Update, context: CallbackContext):
         )
         
         context.user_data['awaiting_broadcast'] = False
-        return
+        return  # IMPORTANT: Return to prevent other handlers from processing
     
     # Check if we're waiting for ban reason
     if context.user_data.get('awaiting_ban_reason'):
+        logger.info(f"🔨 Processing ban reason from admin {user_id}")
+        
         if text.lower() == 'cancel':
             await update.message.reply_text("Ban cancelled.")
             context.user_data.pop('awaiting_ban_reason', None)
@@ -524,7 +692,11 @@ async def handle_admin_text_input(update: Update, context: CallbackContext):
             )
         
         context.user_data['awaiting_ban_reason'] = False
-        return
+        return  # IMPORTANT: Return to prevent other handlers from processing
+    
+    # If we reach here, it's not an admin action, let other handlers process
+    logger.info(f"📝 Not an admin action, allowing other handlers to process")
+    return
 
 def _is_admin(user_id: int) -> bool:
     """Check if user is admin"""
@@ -561,12 +733,26 @@ def _format_date(date_str):
 
 def setup_handlers(application):
     """Setup admin handlers"""
+    # Add admin command handler
     application.add_handler(CommandHandler("admin", admin_command))
+    application.add_handler(CommandHandler("dbdiagnostic", db_diagnostic))  # Add this line
+    
+    # Add callback query handlers
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^admin_'))
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^user_'))
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^ban_'))
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^broadcast_'))
     application.add_handler(CallbackQueryHandler(admin_callback_handler, pattern='^back_to_admin'))
+    
+    # Add admin text input handler with HIGHER priority (group 1)
+    # This will run BEFORE the regular text handler (group 0)
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND, 
+            handle_admin_text_input
+        ),
+        group=1  # Higher group number = higher priority
+    )
     
     # Single message handler for all admin text input
     application.add_handler(MessageHandler(

@@ -3,7 +3,7 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from bot.services.database import db_manager
+from database import db_manager
 from bot_config import ADMIN_IDS
 
 def init_admins():

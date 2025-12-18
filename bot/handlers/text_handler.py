@@ -594,9 +594,19 @@ def setup_handlers(application):
     application.add_handler(CommandHandler("mydata", mydata_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message))
     
-    # Add channel verification callback handler
+      # Add channel verification callback handler
     from bot.utils.checks import handle_channel_verification
     application.add_handler(CallbackQueryHandler(
         handle_channel_verification, 
         pattern="^verify_channels$"
     ))
+    
+    # Add regular text handler with LOWER priority (group 0 - default)
+    # This will run AFTER admin handlers
+    application.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND, 
+            handle_text_message
+        ),
+        group=0  # Default group, lower priority
+    )

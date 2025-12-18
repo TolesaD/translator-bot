@@ -1,6 +1,11 @@
 [build]
 builder = "nixpacks"
-buildCommand = "mkdir -p /app/config && echo '7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs' > /app/config/bot_token.txt"
+buildCommand = "mkdir -p /app/config /data && echo '7747855846:AAFWjqqZXNBpwFFjrAQi3fjT5qwBbjcJCNs' > /app/config/bot_token.txt"
 
 [deploy]
 startCommand = "python main.py"
+
+# Add persistent volume configuration
+[[volumes]]
+name = "bot-data"
+mountPath = "/data"  # This matches bot/database.py

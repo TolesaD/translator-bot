@@ -5,7 +5,7 @@ import time
 from functools import wraps
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
-from bot.services.database import db_manager
+from database import db_manager
 
 logger = logging.getLogger(__name__)
 
@@ -53,30 +53,30 @@ ADMIN_IDS = get_admin_ids()
 logger.info(f"✅ Checks module loaded: {len(REQUIRED_CHANNELS)} required channels, {len(ADMIN_IDS)} admins")
 
 def require_channel_membership(func):
-    """Decorator to check if user is member of all required channels"""
+    """Decorator to check if user is member of all required channels AND not banned"""
     @wraps(func)
     async def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
         user_id = update.effective_user.id
         
-        logger.info(f"🔍 Channel check for user {user_id}")
+        logger.info(f"🔍 Security check for user {user_id}")
         
-        # Skip check for admins
+        # FIRST: Check if user is banned (this should come before admin check for banned admins)
+        if db_manager.is_user_banned(user_id):
+            logger.warning(f"🚫 Banned user {user_id} tried to use bot")
+            await _send_banned_message(update, context)
+            return None  # BLOCK the command
+        
+        # THEN: Skip check for admins (but banned admins already caught above)
         if _is_admin(user_id):
             logger.info(f"✅ User {user_id} is admin, bypassing channel check")
             return await func(update, context, *args, **kwargs)
-        
-        # Check if user is banned
-        if db_manager.is_user_banned(user_id):
-            await _send_banned_message(update, context)
-            return None
         
         # Check if channels are required
         if not REQUIRED_CHANNELS:
             return await func(update, context, *args, **kwargs)
         
-        # Check if user has joined all required channels (with cache expiry)
-        # Use 1-hour cache for normal checks, but force re-check every 24 hours
-        cache_time = CHANNEL_CACHE_EXPIRY  # 1 hour
+        # Check cached membership with expiry
+        cache_time = CHANNEL_CACHE_EXPIRY
         
         # Force re-check if last check was more than 24 hours ago
         current_time = time.time()
@@ -84,7 +84,7 @@ def require_channel_membership(func):
             last_verified = db_manager.get_channel_verification_timestamp(user_id, channel)
             if current_time - last_verified > FORCE_RECHECK_INTERVAL:
                 logger.info(f"Forcing re-check for user {user_id}, channel {channel}")
-                cache_time = 0  # Force immediate check
+                cache_time = 0
                 break
         
         if db_manager.has_joined_required_channels(user_id, REQUIRED_CHANNELS, max_cache_age=cache_time):
@@ -566,11 +566,15 @@ def _is_admin(user_id: int) -> bool:
     """Check if user is admin"""
     logger.info(f"🔍 Checking if user {user_id} is admin...")
     logger.info(f"🔍 ADMIN_IDS from env: {ADMIN_IDS}")
+    logger.info(f"🔍 Type of ADMIN_IDS: {type(ADMIN_IDS)}")
+    logger.info(f"🔍 Type of user_id: {type(user_id)}")
     
     # First check environment variable admins
     if user_id in ADMIN_IDS:
         logger.info(f"✅ User {user_id} is in ADMIN_IDS list")
         return True
+    else:
+        logger.info(f"❌ User {user_id} is NOT in ADMIN_IDS list: {ADMIN_IDS}")
     
     # Then check database (for dynamic admin management)
     db_admin = db_manager.is_user_admin(user_id)
